@@ -1,0 +1,4 @@
+[
+  {"model":"reviews.movie","pk":1,"fields":{"title":"Inception","description":"A mind-bending thriller.","release_date":"2010-07-16"}},
+  {"model":"reviews.movie","pk":2,"fields":{"title":"The Matrix","description":"A hacker discovers reality.","release_date":"1999-03-31"}}
+]

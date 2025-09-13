@@ -1,0 +1,23 @@
+{% extends 'reviews/base.html' %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="row align-items-center">
+  <div class="col-md-7">
+    <h1 class="display-5">Welcome to MovieReviews</h1>
+    <p class="lead">Browse and review movies. Admins can login below to moderate reviews.</p>
+    <a href="{% url 'movies_list' %}" class="btn btn-primary btn-lg">Browse movies</a>
+  </div>
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">Admin login</h5>
+        <form method="post" action="{% url 'admin_login' %}">{% csrf_token %}
+          <div class="mb-2"><label class="form-label">Username</label><input name="username" class="form-control" required></div>
+          <div class="mb-2"><label class="form-label">Password</label><input name="password" type="password" class="form-control" required></div>
+          <button class="btn btn-danger w-100" type="submit">Admin sign in</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
