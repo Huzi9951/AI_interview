@@ -135,32 +135,47 @@ export default function ReportPage() {
                     <div className={styles.questionGrid}>
                         {questions.map((q, i) => {
                             const eval_ = evaluations[i] || {};
+                            const isGraded = eval_.graded !== false;
+                            const isFollowUp = eval_.isFollowUp || false;
                             return (
                                 <div key={i} className={`glass-card ${styles.questionCard}`}>
                                     <div className={styles.qHeader}>
-                                        <span className={styles.qNumber}>Question {i + 1}</span>
-                                        <span className={styles.qScore}>{eval_.score || 0}/10</span>
+                                        <span className={styles.qNumber}>
+                                            Question {i + 1}
+                                            {isFollowUp && <span style={{ marginLeft: 8, background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6 }}>Follow-up</span>}
+                                            {!isGraded && <span style={{ marginLeft: 8, background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6 }}>Not Graded</span>}
+                                        </span>
+                                        <span className={styles.qScore}>{isGraded ? `${eval_.score || 0}/10` : '—'}</span>
                                     </div>
                                     <div className={styles.qText}>{q}</div>
                                     <div className={styles.qAnswer}>
                                         <strong>Answer:</strong> {answers[i] || '[No response]'}
                                     </div>
-                                    <div className={styles.qMeta}>
-                                        <span className={styles.qMetaItem}>Depth: {eval_.technical_depth || 0}/10</span>
-                                        <span className={styles.qMetaItem}>Clarity: {eval_.clarity || 0}/10</span>
-                                        <span className={styles.qMetaItem}>Relevance: {eval_.relevance || 0}/10</span>
-                                        <span className={styles.qMetaItem}>Confidence: {eval_.confidence_estimate || 0}/10</span>
-                                    </div>
-                                    {eval_.strengths && eval_.strengths.length > 0 && (
-                                        <div style={{ marginTop: '12px', fontSize: '0.85rem' }}>
-                                            <span style={{ color: 'var(--accent-success)' }}>✓ Strengths: </span>
-                                            <span style={{ color: 'var(--text-secondary)' }}>{eval_.strengths.join(', ')}</span>
-                                        </div>
+                                    {isGraded && (
+                                        <>
+                                            <div className={styles.qMeta}>
+                                                <span className={styles.qMetaItem}>Depth: {eval_.technical_depth || 0}/10</span>
+                                                <span className={styles.qMetaItem}>Clarity: {eval_.clarity || 0}/10</span>
+                                                <span className={styles.qMetaItem}>Relevance: {eval_.relevance || 0}/10</span>
+                                                <span className={styles.qMetaItem}>Confidence: {eval_.confidence_estimate || 0}/10</span>
+                                            </div>
+                                            {eval_.strengths && eval_.strengths.length > 0 && (
+                                                <div style={{ marginTop: '12px', fontSize: '0.85rem' }}>
+                                                    <span style={{ color: 'var(--accent-success)' }}>✓ Strengths: </span>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>{eval_.strengths.join(', ')}</span>
+                                                </div>
+                                            )}
+                                            {eval_.weaknesses && eval_.weaknesses.length > 0 && (
+                                                <div style={{ marginTop: '4px', fontSize: '0.85rem' }}>
+                                                    <span style={{ color: 'var(--accent-danger)' }}>✗ Weaknesses: </span>
+                                                    <span style={{ color: 'var(--text-secondary)' }}>{eval_.weaknesses.join(', ')}</span>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
-                                    {eval_.weaknesses && eval_.weaknesses.length > 0 && (
-                                        <div style={{ marginTop: '4px', fontSize: '0.85rem' }}>
-                                            <span style={{ color: 'var(--accent-danger)' }}>✗ Weaknesses: </span>
-                                            <span style={{ color: 'var(--text-secondary)' }}>{eval_.weaknesses.join(', ')}</span>
+                                    {!isGraded && eval_.detailed_feedback && (
+                                        <div style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                            {eval_.detailed_feedback}
                                         </div>
                                     )}
                                 </div>

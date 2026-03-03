@@ -30,8 +30,32 @@ let ttsFlushTimer = null;  // timer to flush accumulated chunks
 let ttsFlushed = false;    // server sent Flushed event
 let ttsPlaybackDone = false;
 let ttsLastSourceNode = null;
+let ttsIsFirstChunk = true; // track first chunk for fast-path scheduling
 
 const CHUNK_ACCUMULATE_MS = 80; // accumulate chunks for 80ms before scheduling
+const CHUNK_ACCUMULATE_MS_FIRST = 20; // faster scheduling for the very first chunk
+
+// =============================================
+// Warm-up: pre-initialize AudioContext
+// =============================================
+export async function warmUp() {
+    if (typeof window === 'undefined') return;
+    try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') {
+            await ctx.resume();
+        }
+        // Play a tiny silent buffer to fully activate the audio pipeline
+        const silentBuffer = ctx.createBuffer(1, 1, TTS_SAMPLE_RATE);
+        const source = ctx.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(ctx.destination);
+        source.start();
+        console.log('AudioContext warmed up successfully');
+    } catch (e) {
+        console.warn('AudioContext warm-up failed:', e);
+    }
+}
 
 export async function speak(text) {
     if (typeof window === 'undefined') return;
@@ -46,13 +70,14 @@ export async function speak(text) {
     ttsFlushed = false;
     ttsPlaybackDone = false;
     ttsLastSourceNode = null;
+    ttsIsFirstChunk = true;
 
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') {
         await ctx.resume();
     }
 
-    ttsScheduledEnd = ctx.currentTime + 0.05; // small lookahead
+    ttsScheduledEnd = ctx.currentTime; // no lookahead — start playback immediately
     ttsSources = [];
     ttsChunkBuffer = [];
 
@@ -82,8 +107,10 @@ export async function speak(text) {
                 ttsChunkBuffer.push(floats);
 
                 // Debounce: schedule accumulated chunks after a short delay
+                // Use faster accumulation for first chunk to reduce initial latency
+                const accumulateMs = ttsIsFirstChunk ? CHUNK_ACCUMULATE_MS_FIRST : CHUNK_ACCUMULATE_MS;
                 if (ttsFlushTimer) clearTimeout(ttsFlushTimer);
-                ttsFlushTimer = setTimeout(() => scheduleAccumulatedChunks(), CHUNK_ACCUMULATE_MS);
+                ttsFlushTimer = setTimeout(() => scheduleAccumulatedChunks(), accumulateMs);
             } else if (typeof event.data === 'string') {
                 try {
                     const msg = JSON.parse(event.data);
@@ -118,6 +145,7 @@ export async function speak(text) {
 
     function scheduleAccumulatedChunks() {
         if (ttsAborted || ttsChunkBuffer.length === 0) return;
+        ttsIsFirstChunk = false; // subsequent chunks use normal accumulation delay
 
         // Merge all accumulated chunks into one buffer
         let totalLength = 0;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import styles from './page.module.css';
@@ -20,6 +20,23 @@ export default function SetupPage() {
     const [inviteSent, setInviteSent] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
+    const [fromInvite, setFromInvite] = useState(false);
+
+    // Auto-fill from invite link
+    useEffect(() => {
+        try {
+            const inviteRaw = sessionStorage.getItem('visionhire_invite');
+            if (inviteRaw) {
+                const invite = JSON.parse(inviteRaw);
+                if (invite.fromInvite) {
+                    setFromInvite(true);
+                    if (invite.jobDescription) setJd(invite.jobDescription);
+                    if (invite.customQuestions?.length) setCustomQuestions(invite.customQuestions);
+                }
+                sessionStorage.removeItem('visionhire_invite');
+            }
+        } catch (e) { /* ignore */ }
+    }, []);
 
     const handleFileChange = async (e) => {
         const file = e.target.files[0];
@@ -101,7 +118,7 @@ export default function SetupPage() {
             <header className={styles.header}>
                 <Link href="/" className={styles.logo}>
                     <div className={styles.logoIcon}>⚡</div>
-                    <span>Vision<span className={styles.logoGradient}>Hire</span> AI</span>
+                    <span>Hyper<span className={styles.logoGradient}>Hire</span></span>
                 </Link>
                 <div className={styles.stepBadge}>📋 Step 1: Setup</div>
             </header>

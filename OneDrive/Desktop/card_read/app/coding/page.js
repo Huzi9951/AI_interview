@@ -123,7 +123,7 @@ export default function CodingPage() {
                 <div className={styles.topBarLeft}>
                     <div className={styles.logo}>
                         <div className={styles.logoIcon}>⚡</div>
-                        VisionHire
+                        HyperHire
                     </div>
                     <span className={styles.badge}>💻 Coding Round</span>
                 </div>

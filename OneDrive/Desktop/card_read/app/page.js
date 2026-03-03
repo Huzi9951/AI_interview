@@ -17,9 +17,12 @@ export default function LandingPage() {
       <nav className={styles.navbar}>
         <div className={styles.logo}>
           <div className={styles.logoIcon}>⚡</div>
-          <span>Vision<span className={styles.logoGradient}>Hire</span> AI</span>
+          <span>Hyper<span className={styles.logoGradient}>Hire</span></span>
         </div>
-        <div className={styles.navBadge}>✨ AI-Powered Interviews</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Link href="/dashboard" className={styles.navBadge} style={{ textDecoration: 'none', cursor: 'pointer' }}>📊 HR Dashboard</Link>
+          <div className={styles.navBadge}>✨ AI-Powered Interviews</div>
+        </div>
       </nav>
 
       {/* Hero Section */}
@@ -104,7 +107,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className={styles.footer}>
-        <p>© 2026 VisionHire AI — Built with intelligence. Powered by AI.</p>
+        <p>© 2026 HyperHire — Built with intelligence. Powered by AI.</p>
       </footer>
     </div>
   );

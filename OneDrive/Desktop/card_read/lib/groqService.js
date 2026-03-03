@@ -37,6 +37,52 @@ async function chatCompletionText(messages, temperature = 0.7) {
 }
 
 // =============================================
+// 0) Parse Job Description for Auto-Fill
+// =============================================
+export async function parseJobDescription(jdText) {
+    const messages = [
+        {
+            role: 'system',
+            content: `You are an expert HR analyst AI. Parse the given job description text and extract structured data to auto-fill a job posting form.
+
+Output MUST be valid JSON with this exact structure:
+{
+  "title": "extracted job title",
+  "employmentType": "Full-Time" or "Part-Time" or "Contract" or "Internship" or "Freelance",
+  "locationType": "In Office" or "Remote" or "Hybrid",
+  "location": "city, state/country",
+  "department": "Engineering" or "Design" or "Marketing" or "Sales" or "Human Resources" or "Finance" or "Operations" or "Business Development" or "IT" or "Legal" or "Other" or "",
+  "experienceLevel": "Entry Level" or "Junior" or "Mid-Level" or "Senior" or "Lead" or "Director" or "Executive",
+  "experienceMin": number (minimum years),
+  "experienceMax": number (maximum years),
+  "description": "full job description text (clean and formatted)",
+  "requirements": "extracted requirements section",
+  "responsibilities": "extracted responsibilities section",
+  "skills": ["skill1", "skill2", "skill3"],
+  "mustHave": [
+    "specific must-have qualification or requirement 1",
+    "specific must-have qualification or requirement 2"
+  ],
+  "preferred": [
+    "nice-to-have qualification 1",
+    "nice-to-have qualification 2"
+  ],
+  "salaryMin": number or null,
+  "salaryMax": number or null,
+  "currency": "USD" or "INR" or "EUR" or "GBP"
+}
+
+Extract as much information as possible. For fields not found in the JD, use reasonable defaults. Skills should be specific technical/domain skills. Must-have criteria are essential qualifications; preferred are nice-to-have qualifications.`
+        },
+        {
+            role: 'user',
+            content: `JOB DESCRIPTION:\n${jdText}`
+        }
+    ];
+    return await chatCompletion(messages, 0.3);
+}
+
+// =============================================
 // 1) Analyze JD + Resume
 // =============================================
 export async function analyzeJDAndResume(jd, resumeText) {
@@ -71,7 +117,7 @@ Output MUST be valid JSON with this exact structure:
 // 2) Generate Interview Question
 // =============================================
 export async function generateQuestion(context) {
-    const { skillAnalysis, questions, answers, evaluations, maxQuestions = 6, customQuestions = [] } = context;
+    const { skillAnalysis, questions, answers, evaluations, maxQuestions = 6, customQuestions = [], jobDescription = '' } = context;
 
     let historyText = '';
     for (let i = 0; i < questions.length; i++) {
@@ -100,21 +146,69 @@ Rules:
 - For question 1: Start with a question about the candidate's strongest matching skill.
 - For later questions: Use evaluation data to adapt.
 - NEVER repeat a question that was already asked.
+- If the previous answer was vague or incomplete, you may set "is_follow_up" to true to ask a probing follow-up. Follow-ups do NOT count toward the question total.
 
-Return JSON: { "question": "your question text here", "target_skill": "skill being tested", "difficulty": "easy|medium|hard", "reasoning": "why this question" }`
+Return JSON: { "question": "your question text here", "target_skill": "skill being tested", "difficulty": "easy|medium|hard", "reasoning": "why this question", "is_follow_up": false }`
         },
         {
             role: 'user',
-            content: `SKILL ANALYSIS:\n${JSON.stringify(skillAnalysis, null, 2)}${customQuestions.length > 0 ? `\n\nCUSTOM QUESTIONS ALREADY ASKED (do NOT repeat these):\n${customQuestions.map((q, i) => `- ${q}`).join('\n')}` : ''}\n\nINTERVIEW HISTORY:${historyText || '\nNo questions asked yet - this is the first question.'}`
+            content: `SKILL ANALYSIS:\n${JSON.stringify(skillAnalysis, null, 2)}${customQuestions.length > 0 ? `\n\nCUSTOM QUESTIONS ALREADY ASKED (do NOT repeat these):\n${customQuestions.map((q, i) => `- ${q}`).join('\n')}` : ''}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nINTERVIEW HISTORY:${historyText || '\nNo questions asked yet - this is the first question.'}`
         }
     ];
     return await chatCompletion(messages, 0.7);
 }
 
 // =============================================
+// 2b) Batch Generate Interview Questions (for HR preview)
+// =============================================
+export async function generateInterviewQuestions(jobDescription, count = 4) {
+    const messages = [
+        {
+            role: 'system',
+            content: `You are a professional technical interviewer. Generate exactly ${count} interview questions based on the job description provided.
+
+Rules:
+- Questions must be directly relevant to the job description and required skills.
+- Mix difficulty levels: start easy, then medium, then hard.
+- Questions should be concise and clear (1-3 sentences).
+- Include a mix of technical knowledge, problem-solving, and scenario-based questions.
+- Each question should test a different skill area from the JD.
+
+Return JSON: { "questions": [{ "question": "text", "target_skill": "skill being tested", "difficulty": "easy|medium|hard" }] }`
+        },
+        {
+            role: 'user',
+            content: `JOB DESCRIPTION:\n${jobDescription}\n\nGenerate ${count} interview questions.`
+        }
+    ];
+    return await chatCompletion(messages, 0.6);
+}
+
+// =============================================
 // 3) Evaluate Answer
 // =============================================
 export async function evaluateAnswer(question, answer, context) {
+    // If marked as not JD-relevant, skip grading
+    if (context.isJDRelevant === false) {
+        return {
+            score: null,
+            technical_depth: null,
+            clarity: null,
+            relevance: null,
+            confidence_estimate: null,
+            strengths: [],
+            weaknesses: [],
+            follow_up_needed: false,
+            follow_up_reason: '',
+            detailed_feedback: 'This question was not graded as it is not directly relevant to the job description.',
+            graded: false,
+        };
+    }
+
+    const expectedAnswerSection = context.expectedAnswer
+        ? `\n\nEXPECTED ANSWER (provided by hiring manager — compare the candidate's answer against this):\n${context.expectedAnswer}`
+        : '';
+
     const messages = [
         {
             role: 'system',
@@ -126,6 +220,7 @@ Be precise and honest in your scoring. Do NOT inflate scores.
 - Score 6-7: Average, correct but lacks depth
 - Score 8-9: Good, demonstrates strong understanding
 - Score 10: Exceptional, expert-level answer
+${context.expectedAnswer ? '\nIMPORTANT: An expected answer has been provided by the hiring manager. Compare the candidate\'s answer against it. The closer the candidate\'s answer aligns with the expected answer (in substance, not necessarily wording), the higher the score should be.' : ''}
 
 Return JSON with this EXACT structure:
 {
@@ -143,10 +238,11 @@ Return JSON with this EXACT structure:
         },
         {
             role: 'user',
-            content: `QUESTION: ${question}\n\nCANDIDATE'S ANSWER: ${answer}\n\nTARGET SKILL AREA: ${context.targetSkill || 'general'}\n\nJOB CONTEXT: ${context.jobTitle || 'Technical Role'}`
+            content: `QUESTION: ${question}\n\nCANDIDATE'S ANSWER: ${answer}\n\nTARGET SKILL AREA: ${context.targetSkill || 'general'}\n\nJOB CONTEXT: ${context.jobTitle || 'Technical Role'}\n\nJOB DESCRIPTION: ${context.jobDescription || ''}${expectedAnswerSection}`
         }
     ];
-    return await chatCompletion(messages, 0.2);
+    const result = await chatCompletion(messages, 0.2);
+    return { ...result, graded: true };
 }
 
 // =============================================
@@ -224,17 +320,25 @@ export async function generateFinalReport(interviewData) {
     } = interviewData;
 
     let interviewTranscript = '';
+    let gradedCount = 0;
+    let gradedTotal = 0;
     for (let i = 0; i < questions.length; i++) {
-        interviewTranscript += `\n\n--- Question ${i + 1} ---`;
+        const isFollowUp = evaluations[i]?.isFollowUp || false;
+        const isGraded = evaluations[i]?.graded !== false;
+        interviewTranscript += `\n\n--- Question ${i + 1}${isFollowUp ? ' (Follow-up)' : ''}${!isGraded ? ' (Not Graded)' : ''} ---`;
         interviewTranscript += `\nQ: ${questions[i]}`;
         interviewTranscript += `\nA: ${answers[i] || '[No response]'}`;
-        if (evaluations[i]) {
+        if (evaluations[i] && isGraded) {
             interviewTranscript += `\nScore: ${evaluations[i].score}/10`;
             interviewTranscript += `\nTechnical Depth: ${evaluations[i].technical_depth}/10`;
             interviewTranscript += `\nClarity: ${evaluations[i].clarity}/10`;
             interviewTranscript += `\nRelevance: ${evaluations[i].relevance}/10`;
             interviewTranscript += `\nStrengths: ${(evaluations[i].strengths || []).join(', ')}`;
             interviewTranscript += `\nWeaknesses: ${(evaluations[i].weaknesses || []).join(', ')}`;
+            gradedCount++;
+            gradedTotal += (evaluations[i].score || 0);
+        } else if (!isGraded) {
+            interviewTranscript += `\n[Not graded — not relevant to JD]`;
         }
     }
 
@@ -245,8 +349,13 @@ export async function generateFinalReport(interviewData) {
 
 IMPORTANT: Be thorough, precise, and honest. Base all scores strictly on the actual interview data provided. Do NOT inflate or deflate scores.
 
+IMPORTANT GRADING RULES:
+- Only consider questions marked as "graded" for the overall score calculation.
+- Questions marked "(Not Graded)" should be mentioned but NOT factored into the score.
+- Follow-up questions provide additional insight but are supplementary.
+
 Calculate the overall score as a weighted average:
-- Interview performance (per-question scores): 70% weight
+- Interview performance (graded per-question scores only): 70% weight
 - Skill match from JD analysis: 20% weight  
 - Violations impact: 10% negative weight (deduct for violations)
 ${includeCodingRound ? '- If coding round was included, factor it into 30% of interview performance.' : ''}
@@ -265,7 +374,9 @@ Return JSON:
       "question": "q text",
       "answer_summary": "brief answer summary",
       "score": 0-10,
-      "key_insight": "what this revealed about the candidate"
+      "key_insight": "what this revealed about the candidate",
+      "graded": true,
+      "is_follow_up": false
     }
   ],
   "skill_assessment": {
@@ -283,7 +394,7 @@ Return JSON:
         },
         {
             role: 'user',
-            content: `SKILL ANALYSIS:\n${JSON.stringify(skillAnalysis, null, 2)}\n\nINTERVIEW TRANSCRIPT:${interviewTranscript}\n\nVIOLATIONS: ${JSON.stringify(violations)}\n\nCODING EVALUATION: ${codingEvaluation ? JSON.stringify(codingEvaluation) : 'Not applicable - coding round was not included'}`
+            content: `SKILL ANALYSIS:\n${JSON.stringify(skillAnalysis, null, 2)}\n\nGRADED QUESTIONS: ${gradedCount} (average: ${gradedCount > 0 ? (gradedTotal / gradedCount).toFixed(1) : 'N/A'}/10)\n\nINTERVIEW TRANSCRIPT:${interviewTranscript}\n\nVIOLATIONS: ${JSON.stringify(violations)}\n\nCODING EVALUATION: ${codingEvaluation ? JSON.stringify(codingEvaluation) : 'Not applicable - coding round was not included'}`
         }
     ];
     return await chatCompletion(messages, 0.2);
