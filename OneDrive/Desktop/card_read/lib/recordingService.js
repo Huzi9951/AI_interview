@@ -1,19 +1,19 @@
 // =============================================
-// Recording Service — Screen + Mic capture
-// Completely non-blocking, runs in background
+// Recording Service — Camera + Mic capture
+// No screen sharing required. Works on all browsers.
 // =============================================
 
 let mediaRecorder = null;
 let recordedChunks = [];
-let screenStream = null;
-let combinedStream = null;
+let recordingStream = null;
 
 /**
  * Check if all required permissions/APIs are available.
- * Returns { camera: bool, microphone: bool, screen: bool, allPassed: bool }
+ * Returns { camera: bool, microphone: bool, allPassed: bool }
+ * No screen permission needed — we record camera+mic directly.
  */
 export async function checkPermissions() {
-    const result = { camera: false, microphone: false, screen: false, allPassed: false };
+    const result = { camera: false, microphone: false, screen: true, allPassed: false };
 
     // Check camera
     try {
@@ -33,49 +33,31 @@ export async function checkPermissions() {
         console.warn('Microphone permission denied:', e.message);
     }
 
-    // Check screen capture support (don't actually capture, just check API exists)
-    try {
-        result.screen = typeof navigator.mediaDevices.getDisplayMedia === 'function';
-    } catch (e) {
-        result.screen = false;
-    }
-
-    result.allPassed = result.camera && result.microphone && result.screen;
+    // screen is always true since we don't need screen share
+    result.allPassed = result.camera && result.microphone;
     return result;
 }
 
 /**
- * Start recording screen + microphone audio.
- * The camera stream is NOT included — it remains separate for display.
- * This function is fire-and-forget; it does not block the interview.
+ * Start recording camera + microphone.
+ * Accepts an optional existing camera MediaStream to avoid re-acquiring the camera.
+ * If no stream is provided, acquires camera+mic fresh.
  */
-export async function startRecording() {
+export async function startRecording(existingCameraStream = null) {
     try {
         recordedChunks = [];
-        let videoStream = null;
 
-        // Try screen capture first, fall back to camera if denied
-        try {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    width: { ideal: 854 },
-                    height: { ideal: 480 },
-                    frameRate: { ideal: 10, max: 15 },
-                },
-                audio: true,
-            });
-            videoStream = screenStream;
-        } catch (screenErr) {
-            console.warn('Screen capture denied, falling back to camera-only recording:', screenErr.message);
-            // Fall back to camera recording
+        let videoStream = existingCameraStream;
+
+        // If no existing camera stream, acquire one
+        if (!videoStream) {
             try {
-                const camStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 10, max: 15 } },
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 15, max: 24 } },
+                    audio: false,
                 });
-                videoStream = camStream;
-                screenStream = camStream; // store for cleanup
             } catch (camErr) {
-                console.error('Camera also denied:', camErr.message);
+                console.error('Camera access denied for recording:', camErr.message);
                 return false;
             }
         }
@@ -89,26 +71,10 @@ export async function startRecording() {
             },
         });
 
-        // Combine video + mic audio into one stream
-        const audioContext = new AudioContext();
-        const destination = audioContext.createMediaStreamDestination();
-
-        // Add mic audio
-        const micSource = audioContext.createMediaStreamSource(micStream);
-        micSource.connect(destination);
-
-        // Add system audio if stream has audio tracks
-        if (videoStream.getAudioTracks().length > 0) {
-            const sysSource = audioContext.createMediaStreamSource(
-                new MediaStream(videoStream.getAudioTracks())
-            );
-            sysSource.connect(destination);
-        }
-
-        // Combine: video + mixed audio
-        combinedStream = new MediaStream([
+        // Combine camera video + mic audio into one stream
+        recordingStream = new MediaStream([
             ...videoStream.getVideoTracks(),
-            ...destination.stream.getAudioTracks(),
+            ...micStream.getAudioTracks(),
         ]);
 
         // Determine best codec
@@ -116,11 +82,13 @@ export async function startRecording() {
             ? 'video/webm;codecs=vp9,opus'
             : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
                 ? 'video/webm;codecs=vp8,opus'
-                : 'video/webm';
+                : MediaRecorder.isTypeSupported('video/webm')
+                    ? 'video/webm'
+                    : 'video/mp4';
 
-        mediaRecorder = new MediaRecorder(combinedStream, {
+        mediaRecorder = new MediaRecorder(recordingStream, {
             mimeType,
-            videoBitsPerSecond: 200000,
+            videoBitsPerSecond: 500000, // 500kbps for decent quality
         });
 
         mediaRecorder.ondataavailable = (event) => {
@@ -133,15 +101,9 @@ export async function startRecording() {
             console.error('MediaRecorder error:', e);
         };
 
-        // Handle user stopping screen share via browser UI
-        videoStream.getVideoTracks()[0].onended = () => {
-            console.log('Screen/camera sharing stopped by user');
-            stopRecording();
-        };
-
         // Record in 5-second chunks for reliability
         mediaRecorder.start(5000);
-        console.log('Recording started (video + mic)');
+        console.log('Recording started (camera + mic)');
         return true;
     } catch (err) {
         console.error('Failed to start recording:', err);
@@ -191,13 +153,11 @@ export function isRecording() {
 }
 
 function cleanup() {
-    if (screenStream) {
-        screenStream.getTracks().forEach(t => t.stop());
-        screenStream = null;
-    }
-    if (combinedStream) {
-        combinedStream.getTracks().forEach(t => t.stop());
-        combinedStream = null;
+    // Don't stop the camera tracks — they're shared with the interview video feed
+    // Only stop mic audio tracks that we created for recording
+    if (recordingStream) {
+        recordingStream.getAudioTracks().forEach(t => t.stop());
+        recordingStream = null;
     }
     mediaRecorder = null;
 }

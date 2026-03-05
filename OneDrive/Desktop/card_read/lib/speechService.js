@@ -25,15 +25,9 @@ let ttsWs = null;
 let ttsResolve = null;
 let ttsScheduledEnd = 0;   // AudioContext time when last scheduled chunk ends
 let ttsSources = [];       // all scheduled AudioBufferSourceNodes (for stopSpeaking)
-let ttsChunkBuffer = [];   // accumulate small chunks before scheduling
-let ttsFlushTimer = null;  // timer to flush accumulated chunks
 let ttsFlushed = false;    // server sent Flushed event
 let ttsPlaybackDone = false;
 let ttsLastSourceNode = null;
-let ttsIsFirstChunk = true; // track first chunk for fast-path scheduling
-
-const CHUNK_ACCUMULATE_MS = 80; // accumulate chunks for 80ms before scheduling
-const CHUNK_ACCUMULATE_MS_FIRST = 20; // faster scheduling for the very first chunk
 
 // =============================================
 // Warm-up: pre-initialize AudioContext
@@ -70,16 +64,14 @@ export async function speak(text) {
     ttsFlushed = false;
     ttsPlaybackDone = false;
     ttsLastSourceNode = null;
-    ttsIsFirstChunk = true;
 
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') {
         await ctx.resume();
     }
 
-    ttsScheduledEnd = ctx.currentTime; // no lookahead — start playback immediately
+    ttsScheduledEnd = ctx.currentTime; // start playback immediately
     ttsSources = [];
-    ttsChunkBuffer = [];
 
     return new Promise((resolve) => {
         ttsResolve = resolve;
@@ -98,27 +90,18 @@ export async function speak(text) {
             if (ttsAborted) return;
 
             if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
-                // Accumulate PCM chunks, then schedule as one larger buffer
+                // Convert PCM16 to Float32 and schedule immediately — no debounce
                 const pcm = new Int16Array(event.data);
                 const floats = new Float32Array(pcm.length);
                 for (let i = 0; i < pcm.length; i++) {
                     floats[i] = pcm[i] / 32768;
                 }
-                ttsChunkBuffer.push(floats);
-
-                // Debounce: schedule accumulated chunks after a short delay
-                // Use faster accumulation for first chunk to reduce initial latency
-                const accumulateMs = ttsIsFirstChunk ? CHUNK_ACCUMULATE_MS_FIRST : CHUNK_ACCUMULATE_MS;
-                if (ttsFlushTimer) clearTimeout(ttsFlushTimer);
-                ttsFlushTimer = setTimeout(() => scheduleAccumulatedChunks(), accumulateMs);
+                scheduleChunk(floats);
             } else if (typeof event.data === 'string') {
                 try {
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'Flushed') {
                         ttsFlushed = true;
-                        // Flush any remaining accumulated chunks immediately
-                        if (ttsFlushTimer) { clearTimeout(ttsFlushTimer); ttsFlushTimer = null; }
-                        scheduleAccumulatedChunks();
                         closeTtsWs();
                         checkPlaybackComplete();
                     }
@@ -134,34 +117,18 @@ export async function speak(text) {
 
         ttsWs.onclose = () => {
             if (!ttsFlushed && !ttsAborted) {
-                // Unexpected close — flush remaining chunks
-                if (ttsFlushTimer) { clearTimeout(ttsFlushTimer); ttsFlushTimer = null; }
-                scheduleAccumulatedChunks();
                 ttsFlushed = true;
                 checkPlaybackComplete();
             }
         };
     });
 
-    function scheduleAccumulatedChunks() {
-        if (ttsAborted || ttsChunkBuffer.length === 0) return;
-        ttsIsFirstChunk = false; // subsequent chunks use normal accumulation delay
+    function scheduleChunk(floats) {
+        if (ttsAborted) return;
 
-        // Merge all accumulated chunks into one buffer
-        let totalLength = 0;
-        for (const chunk of ttsChunkBuffer) totalLength += chunk.length;
-        const merged = new Float32Array(totalLength);
-        let offset = 0;
-        for (const chunk of ttsChunkBuffer) {
-            merged.set(chunk, offset);
-            offset += chunk.length;
-        }
-        ttsChunkBuffer = [];
-
-        // Schedule merged buffer at precise time
         const ctx = getAudioContext();
-        const buffer = ctx.createBuffer(1, merged.length, TTS_SAMPLE_RATE);
-        buffer.getChannelData(0).set(merged);
+        const buffer = ctx.createBuffer(1, floats.length, TTS_SAMPLE_RATE);
+        buffer.getChannelData(0).set(floats);
 
         const source = ctx.createBufferSource();
         source.buffer = buffer;
@@ -173,7 +140,6 @@ export async function speak(text) {
         ttsSources.push(source);
         ttsLastSourceNode = source;
 
-        // Track when this last source ends for completion
         source.onended = () => {
             if (source === ttsLastSourceNode) {
                 ttsPlaybackDone = true;
@@ -186,7 +152,6 @@ export async function speak(text) {
         if (ttsFlushed && ttsPlaybackDone) {
             finishTts();
         }
-        // If flushed and no chunks were ever scheduled, finish
         if (ttsFlushed && ttsSources.length === 0) {
             finishTts();
         }
@@ -207,7 +172,6 @@ function closeTtsWs() {
 
 function finishTts() {
     closeTtsWs();
-    if (ttsFlushTimer) { clearTimeout(ttsFlushTimer); ttsFlushTimer = null; }
     if (ttsResolve) {
         const r = ttsResolve;
         ttsResolve = null;
@@ -229,8 +193,6 @@ function fallbackSpeak(text) {
 
 export function stopSpeaking() {
     ttsAborted = true;
-    ttsChunkBuffer = [];
-    if (ttsFlushTimer) { clearTimeout(ttsFlushTimer); ttsFlushTimer = null; }
 
     for (const source of ttsSources) {
         try { source.stop(); } catch (e) { }

@@ -54,6 +54,7 @@ function InterviewContent() {
 
     // Camera & face detection
     const videoRef = useRef(null);
+    const streamRef = useRef(null);
     const canvasRef = useRef(null);
     const [cameraActive, setCameraActive] = useState(false);
     const [faceStatus, setFaceStatus] = useState('detecting');
@@ -215,6 +216,7 @@ function InterviewContent() {
                     video: { width: 640, height: 480, facingMode: 'user' },
                     audio: false,
                 });
+                streamRef.current = stream;
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
                     setCameraActive(true);
@@ -225,11 +227,26 @@ function InterviewContent() {
         }
         if (interviewData && consentGiven) startCamera();
         return () => {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((t) => t.stop());
+            }
             if (videoRef.current?.srcObject) {
                 videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
             }
         };
     }, [interviewData, consentGiven]);
+
+    // =============================================
+    // Attach camera stream when phase changes
+    // =============================================
+    useEffect(() => {
+        if ((phase === 'live' || phase === 'completed') && videoRef.current && streamRef.current) {
+            if (videoRef.current.srcObject !== streamRef.current) {
+                videoRef.current.srcObject = streamRef.current;
+                setCameraActive(true);
+            }
+        }
+    }, [phase]);
 
     // =============================================
     // Real-time face detection every 1 second
@@ -326,13 +343,18 @@ function InterviewContent() {
         } catch (e) { console.warn('Audio warm-up failed:', e); }
         setConsentGiven(true);
 
-        // Start recording in background (non-blocking)
+        // Start camera+mic recording automatically (no screen share needed)
         if (!recordingStartedRef.current) {
             recordingStartedRef.current = true;
-            import('@/lib/recordingService').then(async ({ startRecording }) => {
-                const ok = await startRecording();
+            try {
+                const { startRecording } = await import('@/lib/recordingService');
+                // Pass existing camera stream if available to avoid re-acquiring
+                const cameraStream = videoRef.current?.srcObject || null;
+                const ok = await startRecording(cameraStream);
                 if (!ok) console.warn('Recording failed to start — interview continues without recording');
-            }).catch(e => console.warn('Recording import failed:', e));
+            } catch (e) {
+                console.warn('Recording import failed:', e);
+            }
         }
 
         // Create DB record
@@ -356,7 +378,6 @@ function InterviewContent() {
 
         setPhase('ready');
     };
-
     useEffect(() => {
         if (phase === 'ready' && interviewData && consentGiven) {
             const t = setTimeout(() => askNextQuestion(0), 1500);
@@ -617,8 +638,12 @@ function InterviewContent() {
                 updated[updated.length - 1] = { ...updated[updated.length - 1], score: evaluation.graded !== false ? evaluation.score : null };
                 return updated;
             });
-            setShowEval(evaluation.graded !== false ? evaluation : null);
-            if (evaluation.graded !== false) setTimeout(() => setShowEval(null), 3000);
+            // Only show eval toast to HR, not candidates
+            const isCandidateView = interviewDataRef.current?.isCandidate;
+            if (!isCandidateView) {
+                setShowEval(evaluation.graded !== false ? evaluation : null);
+                if (evaluation.graded !== false) setTimeout(() => setShowEval(null), 3000);
+            }
             setProcessingMsg('');
 
             // Determine next step
@@ -722,6 +747,10 @@ function InterviewContent() {
         } catch (e) { }
 
         // Turn off camera
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+        }
         if (videoRef.current?.srcObject) {
             videoRef.current.srcObject.getTracks().forEach(t => t.stop());
             videoRef.current.srcObject = null;
@@ -798,17 +827,51 @@ function InterviewContent() {
             try {
                 const iData = interviewDataRef.current;
                 const dashData = JSON.parse(localStorage.getItem('visionhire_dashboard') || '{}');
-                if (dashData.candidates && iData.candidateEmail) {
-                    dashData.candidates = dashData.candidates.map(c => {
-                        if (c.email !== iData.candidateEmail) return c;
+                if (iData.candidateEmail) {
+                    if (!dashData.candidates) dashData.candidates = [];
+                    const existingIdx = dashData.candidates.findIndex(c => c.email === iData.candidateEmail);
+                    if (existingIdx >= 0) {
+                        // Update existing candidate
+                        const c = dashData.candidates[existingIdx];
                         const assignments = (c.jobAssignments || []).map(a => {
                             if (a.jobId === iData.jobId || a.jobTitle === iData.jobTitle) {
                                 return { ...a, status: 'completed', score: finalReport.overall_score || 0, completedAt: new Date().toISOString() };
                             }
                             return a;
                         });
-                        return { ...c, jobAssignments: assignments, interviewStatus: 'completed' };
-                    });
+                        // If no matching assignment exists, add one
+                        if (!assignments.some(a => a.jobId === iData.jobId || a.jobTitle === iData.jobTitle)) {
+                            assignments.push({
+                                jobId: iData.jobId || '',
+                                jobTitle: iData.jobTitle || '',
+                                status: 'completed',
+                                score: finalReport.overall_score || 0,
+                                completedAt: new Date().toISOString(),
+                                assignedAt: new Date().toISOString(),
+                            });
+                        }
+                        dashData.candidates[existingIdx] = { ...c, jobAssignments: assignments, interviewStatus: 'completed' };
+                    } else {
+                        // Add new candidate (came via email invite, not in pool yet)
+                        dashData.candidates.push({
+                            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                            email: iData.candidateEmail,
+                            name: iData.candidateName || '',
+                            phone: '',
+                            designation: '',
+                            company: '',
+                            addedAt: new Date().toISOString(),
+                            interviewStatus: 'completed',
+                            jobAssignments: [{
+                                jobId: iData.jobId || '',
+                                jobTitle: iData.jobTitle || '',
+                                status: 'completed',
+                                score: finalReport.overall_score || 0,
+                                completedAt: new Date().toISOString(),
+                                assignedAt: new Date().toISOString(),
+                            }],
+                        });
+                    }
                     dashData.interviewCount = (dashData.interviewCount || 0) + 1;
                     localStorage.setItem('visionhire_dashboard', JSON.stringify(dashData));
                 }
@@ -981,10 +1044,10 @@ function InterviewContent() {
                             </div>
                         </div>
                         <div className={styles.consentItem}>
-                            <span className={styles.consentBullet}>🖥️</span>
+                            <span className={styles.consentBullet}>🎥</span>
                             <div>
-                                <strong>Screen Recording</strong>
-                                <p>Your screen and microphone will be recorded during the interview for review purposes.</p>
+                                <strong>Video Recording</strong>
+                                <p>Your camera and microphone will be recorded during the interview for review purposes.</p>
                             </div>
                         </div>
                         <div className={styles.consentItem}>
@@ -996,7 +1059,7 @@ function InterviewContent() {
                         </div>
                     </div>
                     <div className={styles.consentWarning}>
-                        ⚠️ By clicking &ldquo;I Accept &amp; Begin Interview&rdquo; below, you consent to camera monitoring, screen recording, and proctoring throughout this session.
+                        ⚠️ By clicking &ldquo;I Accept &amp; Begin Interview&rdquo; below, you consent to camera monitoring, video recording, and proctoring throughout this session.
                     </div>
                     <div className={styles.consentActions}>
                         <button className={styles.consentDecline} onClick={() => {
@@ -1009,6 +1072,7 @@ function InterviewContent() {
             </div>
         );
     }
+
 
     return (
         <div className={styles.interviewPage}>
@@ -1151,7 +1215,7 @@ function InterviewContent() {
                             <div key={i} className={styles.transcriptItem}>
                                 <div className={styles.transcriptQ}>Q{i + 1}: {item.question.substring(0, 60)}...</div>
                                 <div className={styles.transcriptA}>{item.answer.substring(0, 80)}{item.answer.length > 80 ? '...' : ''}</div>
-                                {item.score !== null && <div className={styles.transcriptScore}>Score: {item.score}/10</div>}
+                                {item.score !== null && !interviewDataRef.current?.isCandidate && <div className={styles.transcriptScore}>Score: {item.score}/10</div>}
                             </div>
                         ))}
                         {displayHistory.length === 0 && (

@@ -89,6 +89,14 @@ export async function completeInterview(interviewId, {
     return data;
 }
 
+/** Delete an interview record */
+export async function deleteInterview(id) {
+    if (!supabase || !id) return false;
+    const { error } = await supabase.from('interviews').delete().eq('id', id);
+    if (error) { console.error('deleteInterview error:', error); return false; }
+    return true;
+}
+
 // =============================================
 // Recording Upload
 // =============================================
@@ -174,3 +182,16 @@ export async function getInterviewById(id) {
     if (error) { console.error('getInterviewById error:', error); return null; }
     return data;
 }
+
+/** Get all completed interviews (for syncing dashboard status) */
+export async function getCompletedInterviews() {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('interviews')
+        .select('id, candidate_email, candidate_name, job_title, job_id, overall_score, status, started_at, completed_at, recording_url')
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false });
+    if (error) { console.error('getCompletedInterviews error:', error); return []; }
+    return data || [];
+}
+

@@ -113,6 +113,19 @@ export default function CandidatesPage() {
         setShowInvite(true);
     };
 
+    const handleRemoveCandidate = async (candidate) => {
+        dispatch({ type: 'REMOVE_CANDIDATE', payload: candidate.id });
+        if (candidate.id.startsWith('db-')) {
+            try {
+                const dbId = candidate.id.replace('db-', '');
+                const { deleteInterview } = await import('@/lib/db');
+                await deleteInterview(dbId);
+            } catch (err) {
+                console.error('Failed to delete from DB:', err);
+            }
+        }
+    };
+
     // ── Generate AI questions for preview ──
     const generateQuestionsForPreview = async () => {
         const job = state.jobs.find(j => j.id === inviteJobId);
@@ -340,7 +353,7 @@ export default function CandidatesPage() {
                                                 className={styles.analyticsBtn} title="View Interview Analytics">
                                                 📊 Analytics
                                             </Link>
-                                            <button className={styles.removeBtn} onClick={() => dispatch({ type: 'REMOVE_CANDIDATE', payload: c.id })} title="Remove">✕</button>
+                                            <button className={styles.removeBtn} onClick={() => handleRemoveCandidate(c)} title="Remove">✕</button>
                                         </td>
                                     </tr>
                                 );
