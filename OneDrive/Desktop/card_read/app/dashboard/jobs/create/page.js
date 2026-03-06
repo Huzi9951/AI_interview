@@ -50,6 +50,8 @@ export default function CreateJobPage() {
     const [pasteText, setPasteText] = useState('');
     const [extracting, setExtracting] = useState(false);
     const [aiParsing, setAiParsing] = useState(false);
+    const [promptText, setPromptText] = useState('');
+    const [aiGenerating, setAiGenerating] = useState(false);
 
     const updateForm = (field, value) => {
         setForm(prev => ({ ...prev, [field]: value }));
@@ -124,6 +126,47 @@ export default function CreateJobPage() {
         await autoFillFromJD(pasteText.trim());
     };
 
+    // AI-powered generation from Prompt
+    const autoGenerateFromPrompt = async (prompt) => {
+        setAiGenerating(true);
+        try {
+            const { generateJobDescription } = await import('@/lib/groqService');
+            const generated = await generateJobDescription(prompt);
+
+            setForm(prev => ({
+                ...prev,
+                title: generated.title || prev.title,
+                employmentType: generated.employmentType || prev.employmentType,
+                locationType: generated.locationType || prev.locationType,
+                location: generated.location || prev.location,
+                department: generated.department || prev.department,
+                experienceLevel: generated.experienceLevel || prev.experienceLevel,
+                experienceMin: generated.experienceMin ?? prev.experienceMin,
+                experienceMax: generated.experienceMax ?? prev.experienceMax,
+                description: generated.description || '',
+                requirements: generated.requirements || prev.requirements,
+                responsibilities: generated.responsibilities || prev.responsibilities,
+                skills: generated.skills?.length ? generated.skills : prev.skills,
+                mustHave: generated.mustHave?.length ? generated.mustHave : prev.mustHave,
+                preferred: generated.preferred?.length ? generated.preferred : prev.preferred,
+                salaryMin: generated.salaryMin || prev.salaryMin,
+                salaryMax: generated.salaryMax || prev.salaryMax,
+                currency: generated.currency || prev.currency,
+            }));
+        } catch (err) {
+            console.error('AI generation error:', err);
+            alert('Failed to generate Job Description. Please try again.');
+        } finally {
+            setAiGenerating(false);
+        }
+    };
+
+    const handlePromptSubmit = async () => {
+        if (!promptText.trim()) return;
+        setPhase('form');
+        await autoGenerateFromPrompt(promptText.trim());
+    };
+
     const addSkill = () => {
         const s = newSkill.trim();
         if (!s || form.skills.includes(s)) return;
@@ -191,11 +234,13 @@ export default function CreateJobPage() {
 
     // ═══════════ AI Parsing Overlay ═══════════
     const AiParsingOverlay = () => (
-        aiParsing ? (
+        (aiParsing || aiGenerating) ? (
             <div className={styles.aiOverlay}>
                 <div className={styles.aiOverlayContent}>
                     <div className={styles.aiSpinner} />
-                    <div className={styles.aiOverlayTitle}>🤖 AI is analyzing your job description...</div>
+                    <div className={styles.aiOverlayTitle}>
+                        {aiGenerating ? '🤖 AI is drafting your job listing...' : '🤖 AI is analyzing your job description...'}
+                    </div>
                     <div className={styles.aiOverlayDesc}>Auto-filling all form fields. This may take a few seconds.</div>
                 </div>
             </div>
@@ -225,6 +270,14 @@ export default function CreateJobPage() {
                         <div className={styles.methodInfo}>
                             <div className={styles.methodTitle}>Paste Job Description</div>
                             <div className={styles.methodDesc}>Paste your existing job description text to automatically fill the form</div>
+                        </div>
+                    </div>
+
+                    <div className={styles.methodCard} onClick={() => setPhase('prompt')}>
+                        <div className={styles.methodIcon}>✨</div>
+                        <div className={styles.methodInfo}>
+                            <div className={styles.methodTitle}>Generate with AI</div>
+                            <div className={styles.methodDesc}>Type a short prompt and let AI create a professional job posting for you</div>
                         </div>
                     </div>
 
@@ -316,6 +369,43 @@ export default function CreateJobPage() {
                             disabled={!pasteText.trim()}
                         >
                             🤖 Auto-Fill with AI →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ═══════════ RENDER: Prompt ═══════════
+    if (phase === 'prompt') {
+        return (
+            <div className={styles.createPage}>
+                <button className={styles.backLink} onClick={() => setPhase('method')}>
+                    ← Back to methods
+                </button>
+                <div className={styles.pageHeader}>
+                    <h1 className={styles.pageTitle}>Generate with AI</h1>
+                    <p className={styles.pageSubtitle}>Describe the role you&apos;re hiring for, and AI will write the entire description.</p>
+                </div>
+
+                <div className={styles.pasteModal}>
+                    <textarea
+                        className={styles.pasteTextarea}
+                        placeholder="e.g., I'm looking for a Senior React developer in New York with 5 years of experience. They should know Next.js, TypeScript, and AWS. Offer is 120k to 150k..."
+                        value={promptText}
+                        onChange={e => setPromptText(e.target.value)}
+                        autoFocus
+                    />
+                    <div className={styles.pasteActions}>
+                        <button className={styles.prevBtn} onClick={() => setPhase('method')}>
+                            Cancel
+                        </button>
+                        <button
+                            className={styles.nextBtn}
+                            onClick={handlePromptSubmit}
+                            disabled={!promptText.trim()}
+                        >
+                            ✨ Generate Job Listing →
                         </button>
                     </div>
                 </div>

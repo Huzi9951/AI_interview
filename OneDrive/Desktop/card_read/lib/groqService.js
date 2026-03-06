@@ -83,6 +83,53 @@ Extract as much information as possible. For fields not found in the JD, use rea
 }
 
 // =============================================
+// 0.2) Generate Job Description from Prompt
+// =============================================
+export async function generateJobDescription(promptText) {
+    const messages = [
+        {
+            role: 'system',
+            content: `You are an expert HR analyst AI. Generate a professional and comprehensive job description based on the provided short prompt.
+Output MUST be valid JSON with this exact structure:
+{
+  "title": "generated job title",
+  "employmentType": "Full-Time" or "Part-Time" or "Contract" or "Internship" or "Freelance",
+  "locationType": "In Office" or "Remote" or "Hybrid",
+  "location": "city, state/country (infer or use generic if unavailable)",
+  "department": "Engineering" or "Design" or "Marketing" or "Sales" or "Human Resources" or "Finance" or "Operations" or "Business Development" or "IT" or "Legal" or "Other",
+  "experienceLevel": "Entry Level" or "Junior" or "Mid-Level" or "Senior" or "Lead" or "Director" or "Executive",
+  "experienceMin": number (minimum years, infer from prompt or use 0),
+  "experienceMax": number (maximum years, infer or use 2),
+  "description": "A very detailed, professional, and well-written 2-3 paragraph job description.",
+  "requirements": "A bulleted list or detailed paragraph of educational, functional, and general requirements.",
+  "responsibilities": "A bulleted list of 5-8 daily responsibilities and tasks for the role.",
+  "skills": ["skill1", "skill2", "skill3", "skill4", "skill5"],
+  "mustHave": [
+    "specific must-have qualification 1",
+    "specific must-have qualification 2",
+    "specific must-have qualification 3"
+  ],
+  "preferred": [
+    "nice-to-have qualification 1",
+    "nice-to-have qualification 2"
+  ],
+  "salaryMin": number or null,
+  "salaryMax": number or null,
+  "currency": "USD"
+}
+
+Fill in all details completely. Be robust and realistic for a modern hiring pipeline. Infer the most likely requirements, skills, and responsibilities for the job title requested in the prompt.`
+        },
+        {
+            role: 'user',
+            content: `USER PROMPT:\n${promptText}`
+        }
+    ];
+    // Slightly higher temperature for generation vs parsing
+    return await chatCompletion(messages, 0.6);
+}
+
+// =============================================
 // 0.5) Extract Contact Info From Resume
 // =============================================
 export async function extractContactInfoFromResume(resumeText) {
@@ -190,7 +237,7 @@ export async function generateInterviewQuestions(jobDescription) {
         {
             role: 'system',
             content: `You are a professional technical interviewer. Your task is to generate a comprehensive set of interview questions based ONLY on the provided job description.
-CRITICAL: You must independently determine the ideal number of questions to ask (typically between 3 and 10 questions) to thoroughly assess all the core skills and requirements outlined in the JD.
+CRITICAL: You must independently determine the ideal number of questions to ask (typically between 3 and 5 questions) to thoroughly assess all the core skills and requirements outlined in the JD.
 
 Rules:
 - Questions must be directly relevant to the job description and required skills.
