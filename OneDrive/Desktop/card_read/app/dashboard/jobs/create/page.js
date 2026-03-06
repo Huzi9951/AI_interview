@@ -763,20 +763,6 @@ export default function CreateJobPage() {
                                             You&apos;ll set up custom interview questions after creating the job
                                         </div>
                                         <div style={{ padding: '0 20px 20px', display: 'flex', gap: 24 }}>
-                                            <div className={styles.formGroup} style={{ flex: 1 }}>
-                                                <div className={styles.rangeHeader}>
-                                                    <label className={styles.formLabel}>Questions</label>
-                                                    <span className={styles.rangeValue}>{form.questionCount}</span>
-                                                </div>
-                                                <input
-                                                    type="range"
-                                                    className={styles.rangeSlider}
-                                                    min="2"
-                                                    max="10"
-                                                    value={form.questionCount}
-                                                    onChange={e => updateForm('questionCount', Number(e.target.value))}
-                                                />
-                                            </div>
                                             <div className={styles.formGroup}>
                                                 <label className={styles.formLabel}>Coding Round</label>
                                                 <button

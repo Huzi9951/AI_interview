@@ -464,7 +464,74 @@
 }
 
 .notifBellIcon {
+    font-size: 1.1rem;
+}
+
+/* Open Jobs List */
+.recentJobsContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.recentJobRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    background: #f9fafb;
+    border: 1px solid #f3f4f6;
+    transition: all 0.2s ease;
+}
+
+.recentJobRow:hover {
+    background: #ffffff;
+    border-color: #e8e8ef;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.recentJobIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #3b82f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 1rem;
+}
+
+.recentJobDetails {
+    flex: 1;
+}
+
+.recentJobTitle {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 2px;
+}
+
+.recentJobMeta {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.recentJobLink {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #e8604c;
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: #fef2f0;
+    transition: all 0.2s;
+}
+
+.recentJobLink:hover {
+    background: #fce4e0;
 }
 
 .notifTabs {

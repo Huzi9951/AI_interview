@@ -135,6 +135,7 @@ export default function ReportPage() {
                     <div className={styles.questionGrid}>
                         {questions.map((q, i) => {
                             const eval_ = evaluations[i] || {};
+                            const ts = reportData?.questionTimestamps?.[i] || {};
                             const isGraded = eval_.graded !== false;
                             const isFollowUp = eval_.isFollowUp || false;
                             return (
@@ -151,6 +152,27 @@ export default function ReportPage() {
                                     <div className={styles.qAnswer}>
                                         <strong>Answer:</strong> {answers[i] || '[No response]'}
                                     </div>
+                                    {(ts.askedAt || ts.answeredAt) && (
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+                                            ⏱ Asked: {ts.askedAt ? new Date(ts.askedAt).toLocaleTimeString() : '—'}
+                                            {ts.answeredAt && ` → Answered: ${new Date(ts.answeredAt).toLocaleTimeString()}`}
+                                        </div>
+                                    )}
+                                    {reportData.recordingUrl && typeof ts.videoStartTime === 'number' && typeof ts.videoEndTime === 'number' && (
+                                        <div style={{ marginTop: 12, marginBottom: 12 }}>
+                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+                                                📹 Response Recording
+                                            </div>
+                                            <video
+                                                controls
+                                                playsInline
+                                                style={{ width: '100%', borderRadius: 8, maxHeight: 240, objectFit: 'cover', background: '#000' }}
+                                                src={`${reportData.recordingUrl}#t=${Math.max(0, ts.videoStartTime)},${ts.videoEndTime}`}
+                                            >
+                                                Your browser does not support the video tag.
+                                            </video>
+                                        </div>
+                                    )}
                                     {isGraded && (
                                         <>
                                             <div className={styles.qMeta}>
@@ -273,6 +295,22 @@ export default function ReportPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Recording */}
+                {reportData.recordingUrl && (
+                    <div className={styles.section}>
+                        <h2 className={styles.sectionTitle}>🎬 Full Interview Recording</h2>
+                        <div className={`glass-card ${styles.swCard}`}>
+                            <video controls style={{ width: '100%', borderRadius: 8 }} src={reportData.recordingUrl}>
+                                Your browser does not support the video tag.
+                            </video>
+                            <a href={reportData.recordingUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ display: 'inline-block', marginTop: 12, color: 'var(--text-accent)', fontSize: '0.85rem' }}>
+                                📥 Download Recording
+                            </a>
+                        </div>
+                    </div>
+                )}
 
                 {/* Risk Flags */}
                 {report.risk_flags && report.risk_flags.length > 0 && (

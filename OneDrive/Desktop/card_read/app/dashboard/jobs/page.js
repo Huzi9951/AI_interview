@@ -10,6 +10,7 @@ export default function JobsPage() {
     const [selectedJob, setSelectedJob] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('details'); // details | candidates
+    const [statusFilter, setStatusFilter] = useState('all'); // all | assigned | invited | awaiting_review | accepted | rejected
 
     // Modals
     const [showAssignModal, setShowAssignModal] = useState(false);
@@ -23,8 +24,8 @@ export default function JobsPage() {
     const [inviteQuestions, setInviteQuestions] = useState([{ question: '', expectedAnswer: '' }]);
     const [previewQuestions, setPreviewQuestions] = useState([]);
     const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
-    const [questionCount, setQuestionCount] = useState(4);
     const [inviteSending, setInviteSending] = useState(false);
+    const [isDeletingJob, setIsDeletingJob] = useState(false);
 
     const [toast, setToast] = useState('');
 
@@ -76,12 +77,17 @@ export default function JobsPage() {
 
     // ── Open single invite modal (with question preview) ──
     const openInviteFor = (candidate) => {
+        if (candidate.jobStatus === 'invited') {
+            if (!confirm(`An invite was already sent to ${candidate.name || candidate.email} for this role. Are you sure you want to send another one?`)) {
+                return;
+            }
+        }
+
         setInviteCandidate(candidate);
         setInviteExpiryHours(48);
         setInviteStep(1);
         setInviteQuestions([{ question: '', expectedAnswer: '' }]);
         setPreviewQuestions([]);
-        setQuestionCount(4);
         setShowInviteModal(true);
     };
 
@@ -91,7 +97,7 @@ export default function JobsPage() {
         setIsGeneratingQuestions(true);
         try {
             const { generateInterviewQuestions } = await import('@/lib/groqService');
-            const result = await generateInterviewQuestions(selectedJob.description || selectedJob.title, questionCount);
+            const result = await generateInterviewQuestions(selectedJob.description || selectedJob.title);
             const aiQuestions = (result.questions || []).map(q => ({
                 question: q.question,
                 expectedAnswer: '',
@@ -188,7 +194,15 @@ export default function JobsPage() {
         });
     };
 
-    const jobCandidates = selectedJob ? getJobCandidates(selectedJob.id) : [];
+    const baseJobCandidates = selectedJob ? getJobCandidates(selectedJob.id) : [];
+    const jobCandidates = statusFilter === 'all'
+        ? baseJobCandidates
+        : baseJobCandidates.filter(c => {
+            if (statusFilter === 'awaiting_review') {
+                return c.jobStatus === 'completed' || c.jobStatus === 'interviewed';
+            }
+            return c.jobStatus === statusFilter;
+        });
 
     const statusBadge = (status, score) => {
         const map = {
@@ -250,12 +264,26 @@ export default function JobsPage() {
                                         onClick={() => dispatch({ type: 'TOGGLE_JOB_STATUS', payload: selectedJob.id })}>
                                         {selectedJob.status === 'open' ? '🟢 Open' : '🔴 Closed'}
                                     </button>
-                                    <button className={styles.deleteBtn} onClick={() => {
-                                        if (confirm('Delete this job?')) {
-                                            dispatch({ type: 'DELETE_JOB', payload: selectedJob.id });
-                                            setSelectedJob(null);
+                                    <button className={styles.deleteBtn} disabled={isDeletingJob} onClick={async () => {
+                                        if (confirm('Are you absolutely sure you want to delete this job? ALL associated candidate assignments, interview records, and video recordings across the system will be permanently deleted.')) {
+                                            setIsDeletingJob(true);
+                                            try {
+                                                const { deleteJobDataCompletely } = await import('@/lib/db');
+                                                await deleteJobDataCompletely(selectedJob.id);
+
+                                                dispatch({ type: 'DELETE_JOB', payload: selectedJob.id });
+                                                setSelectedJob(null);
+                                                showToast('✓ Job and all associated data deleted completely');
+                                            } catch (err) {
+                                                console.error(err);
+                                                showToast('⚠ Failed to wipe all associated Job data.');
+                                            } finally {
+                                                setIsDeletingJob(false);
+                                            }
                                         }
-                                    }}>🗑️</button>
+                                    }}>
+                                        {isDeletingJob ? '🗑️...' : '🗑️'}
+                                    </button>
                                 </div>
                             </div>
 
@@ -305,6 +333,18 @@ export default function JobsPage() {
                                         <button className={styles.assignBtn} onClick={() => { setAssignSelection(new Set()); setShowAssignModal(true); }}>
                                             + Assign Candidates
                                         </button>
+                                        <select
+                                            value={statusFilter}
+                                            onChange={e => setStatusFilter(e.target.value)}
+                                            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e8e8ef', fontSize: '0.85rem', color: '#1a1a2e', outline: 'none' }}
+                                        >
+                                            <option value="all">All Statuses</option>
+                                            <option value="assigned">Assigned</option>
+                                            <option value="invited">Invited</option>
+                                            <option value="awaiting_review">Awaiting Review</option>
+                                            <option value="accepted">Accepted</option>
+                                            <option value="rejected">Rejected</option>
+                                        </select>
                                     </div>
 
                                     {jobCandidates.length === 0 ? (
@@ -343,7 +383,12 @@ export default function JobsPage() {
                                                                         </button>
                                                                     )}
                                                                     {c.jobStatus === 'invited' && (
-                                                                        <span className={styles.actionWaiting}>⏳ Awaiting</span>
+                                                                        <>
+                                                                            <span className={styles.actionWaiting} style={{ marginRight: 8 }}>⏳ Awaiting</span>
+                                                                            <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
+                                                                                📧 Resend Invite
+                                                                            </button>
+                                                                        </>
                                                                     )}
                                                                     {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed') && (
                                                                         <>
@@ -352,6 +397,12 @@ export default function JobsPage() {
                                                                         </>
                                                                     )}
                                                                     {(c.jobStatus === 'accepted' || c.jobStatus === 'rejected') && null}
+                                                                    {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed' || c.jobStatus === 'accepted' || c.jobStatus === 'rejected') && (
+                                                                        <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`}
+                                                                            className={styles.actionAnalytics}>
+                                                                            📊 Analytics
+                                                                        </Link>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -466,16 +517,6 @@ export default function JobsPage() {
                                                     {h < 48 ? '24h' : h < 72 ? '48h' : h < 168 ? '72h' : '1 week'}
                                                 </button>
                                             ))}
-                                        </div>
-                                    </div>
-
-                                    <div style={{ marginTop: 24 }}>
-                                        <label style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1a1a2e', display: 'block', marginBottom: 8 }}>Number of AI Questions</label>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                            <input type="number" className={styles.expiryInput}
-                                                value={questionCount} min={1} max={15}
-                                                onChange={e => setQuestionCount(Number(e.target.value))} style={{ width: 80 }} />
-                                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>questions will be generated from JD</span>
                                         </div>
                                     </div>
                                 </div>

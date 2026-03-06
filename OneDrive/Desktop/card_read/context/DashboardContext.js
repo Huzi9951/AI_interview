@@ -161,7 +161,21 @@ function dashboardReducer(state, action) {
         }
 
         case 'DELETE_JOB': {
-            return { ...state, jobs: state.jobs.filter(j => j.id !== action.payload) };
+            const jobIdToRemove = action.payload;
+
+            // 1. Remove from jobs array
+            const jobs = state.jobs.filter(j => j.id !== jobIdToRemove);
+
+            // 2. Unassign from all candidates recursively
+            const candidates = state.candidates.map(c => {
+                if (!c.jobAssignments || c.jobAssignments.length === 0) return c;
+                return {
+                    ...c,
+                    jobAssignments: c.jobAssignments.filter(a => a.jobId !== jobIdToRemove)
+                };
+            });
+
+            return { ...state, jobs, candidates };
         }
 
         case 'TOGGLE_JOB_STATUS': {
@@ -218,16 +232,32 @@ function dashboardReducer(state, action) {
             const candidates = state.candidates.map(c => {
                 if (!idSet.has(c.id)) return c;
                 const assignments = c.jobAssignments || [];
-                // Don't duplicate
-                if (assignments.some(a => a.jobId === aJobId)) return c;
+                // Max 1 job constraint: Overwrite any existing assignments
                 return {
                     ...c,
-                    jobAssignments: [...assignments, {
+                    jobAssignments: [{
                         jobId: aJobId,
                         jobTitle: aJobTitle,
                         status: 'assigned', // assigned → invited → interviewed → accepted/rejected
                         assignedAt: new Date().toISOString(),
                     }],
+                };
+            });
+            return { ...state, candidates };
+        }
+
+        case 'CHANGE_CANDIDATE_JOB': {
+            const { candidateId, newJobId, newJobTitle } = action.payload;
+            const candidates = state.candidates.map(c => {
+                if (c.id !== candidateId) return c;
+                return {
+                    ...c,
+                    jobAssignments: [{
+                        jobId: newJobId,
+                        jobTitle: newJobTitle,
+                        status: 'assigned',
+                        assignedAt: new Date().toISOString(),
+                    }]
                 };
             });
             return { ...state, candidates };
@@ -289,16 +319,62 @@ export function DashboardProvider({ children }) {
         }
     }, [state]);
 
+    // Auto-update: listen for localStorage changes (cross-tab) and tab visibility
+    useEffect(() => {
+        // When another tab/window updates localStorage
+        const handleStorageChange = (e) => {
+            if (e.key === STORAGE_KEY && e.newValue) {
+                try {
+                    const newData = JSON.parse(e.newValue);
+                    dispatch({ type: 'INIT', payload: newData });
+                } catch { /* ignore */ }
+            }
+        };
+
+        // When user returns to this tab, reload from localStorage
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                try {
+                    const data = localStorage.getItem(STORAGE_KEY);
+                    if (data) {
+                        dispatch({ type: 'INIT', payload: JSON.parse(data) });
+                    }
+                } catch { /* ignore */ }
+            }
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
     const getStats = useCallback(() => {
-        const totalApplicants = state.jobs.reduce((sum, j) => sum + (j.applicantCount || 0), 0)
-            + state.candidates.length;
+        const totalApplicants = state.candidates.length;
         const openJobs = state.jobs.filter(j => j.status === 'open').length;
         const totalCandidates = state.candidates.length;
+
+        let interviewCount = 0;
+        state.candidates.forEach(c => {
+            if (c.jobAssignments && c.jobAssignments.length > 0) {
+                const status = c.jobAssignments[0].status;
+                if (['interviewed', 'completed', 'accepted', 'rejected'].includes(status)) {
+                    interviewCount++;
+                }
+            } else if (['interviewed', 'completed', 'accepted', 'rejected'].includes(c.interviewStatus)) {
+                // Legacy fallback just in case
+                interviewCount++;
+            }
+        });
+
         return {
             totalApplicants,
             openJobs,
             totalCandidates,
-            interviewCount: state.interviewCount,
+            interviewCount,
         };
     }, [state]);
 

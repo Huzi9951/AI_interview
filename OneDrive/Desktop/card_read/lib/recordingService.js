@@ -3,31 +3,31 @@
 // No screen sharing required. Works on all browsers.
 // =============================================
 
+import { getSharedMicStream, getSharedCameraStream } from './mediaStore';
+
 let mediaRecorder = null;
 let recordedChunks = [];
 let recordingStream = null;
 
 /**
  * Check if all required permissions/APIs are available.
- * Returns { camera: bool, microphone: bool, allPassed: bool }
+ * Returns { camera: bool, microphone: bool, screen: true, allPassed: bool }
  * No screen permission needed — we record camera+mic directly.
  */
 export async function checkPermissions() {
     const result = { camera: false, microphone: false, screen: true, allPassed: false };
 
-    // Check camera
+    // Check camera using shared store (keeps it alive to prevent lockouts)
     try {
-        const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        camStream.getTracks().forEach(t => t.stop());
+        await getSharedCameraStream();
         result.camera = true;
     } catch (e) {
         console.warn('Camera permission denied:', e.message);
     }
 
-    // Check microphone
+    // Check microphone using shared store
     try {
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStream.getTracks().forEach(t => t.stop());
+        await getSharedMicStream();
         result.microphone = true;
     } catch (e) {
         console.warn('Microphone permission denied:', e.message);
@@ -46,34 +46,21 @@ export async function checkPermissions() {
 export async function startRecording(existingCameraStream = null) {
     try {
         recordedChunks = [];
+        let videoTracks = [];
 
-        let videoStream = existingCameraStream;
-
-        // If no existing camera stream, acquire one
-        if (!videoStream) {
-            try {
-                videoStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 15, max: 24 } },
-                    audio: false,
-                });
-            } catch (camErr) {
-                console.error('Camera access denied for recording:', camErr.message);
-                return false;
-            }
+        if (existingCameraStream) {
+            videoTracks = existingCameraStream.getVideoTracks();
+        } else {
+            const camStream = await getSharedCameraStream();
+            videoTracks = camStream.getVideoTracks();
         }
 
-        // Capture microphone separately
-        const micStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                sampleRate: 44100,
-            },
-        });
+        // Capture microphone separately to ensure audio is present
+        const micStream = await getSharedMicStream();
 
         // Combine camera video + mic audio into one stream
         recordingStream = new MediaStream([
-            ...videoStream.getVideoTracks(),
+            ...videoTracks,
             ...micStream.getAudioTracks(),
         ]);
 
@@ -103,11 +90,12 @@ export async function startRecording(existingCameraStream = null) {
 
         // Record in 5-second chunks for reliability
         mediaRecorder.start(5000);
-        console.log('Recording started (camera + mic)');
-        return true;
+        const startTime = Date.now();
+        console.log('Recording started (camera + mic) at', startTime);
+        return { success: true, startTime };
     } catch (err) {
         console.error('Failed to start recording:', err);
-        return false;
+        return { success: false, error: err };
     }
 }
 
@@ -156,7 +144,8 @@ function cleanup() {
     // Don't stop the camera tracks — they're shared with the interview video feed
     // Only stop mic audio tracks that we created for recording
     if (recordingStream) {
-        recordingStream.getAudioTracks().forEach(t => t.stop());
+        // We do NOT stop the tracks here anymore because they are shared system-wide
+        // recordingStream.getAudioTracks().forEach(t => t.stop());
         recordingStream = null;
     }
     mediaRecorder = null;

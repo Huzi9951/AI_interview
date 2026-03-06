@@ -145,8 +145,8 @@
 }
 
 .scoreOutOf {
-    color: var(--text-muted);
-    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
     font-weight: 500;
 }
 
@@ -216,8 +216,8 @@
 .justification {
     padding: 24px;
     line-height: 1.7;
-    color: var(--text-secondary);
-    font-size: 0.95rem;
+    color: #f1f5f9;
+    font-size: 1rem;
     white-space: pre-line;
 }
 
@@ -229,6 +229,10 @@
 
 .questionCard {
     padding: 24px;
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
 }
 
 .qHeader {
@@ -255,17 +259,19 @@
 }
 
 .qText {
-    font-weight: 600;
+    font-weight: 700;
     margin-bottom: 8px;
     line-height: 1.5;
+    color: #ffffff;
+    font-size: 1.05rem;
 }
 
 .qAnswer {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
+    color: #e2e8f0;
+    font-size: 0.95rem;
     line-height: 1.6;
-    padding: 12px;
-    background: var(--bg-glass);
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.05);
     border-radius: var(--radius-sm);
     margin-bottom: 12px;
 }
@@ -279,10 +285,10 @@
 
 .qMetaItem {
     padding: 4px 12px;
-    background: var(--bg-glass);
+    background: rgba(30, 41, 59, 0.8);
     border-radius: var(--radius-full);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-subtle);
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 /* Strength / Weakness */
@@ -300,6 +306,9 @@
 
 .swCard {
     padding: 24px;
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-lg);
 }
 
 .swTitle {
@@ -318,12 +327,12 @@
 }
 
 .swItem {
-    padding: 8px 14px;
-    background: var(--bg-glass);
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.05);
     border-radius: var(--radius-sm);
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    border-left: 3px solid;
+    font-size: 0.95rem;
+    color: #e2e8f0;
+    border-left: 4px solid;
 }
 
 .strengthItem {

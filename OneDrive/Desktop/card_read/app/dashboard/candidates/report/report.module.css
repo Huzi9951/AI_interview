@@ -1,3 +1,9 @@
+.pageWrapper {
+    background-color: #1e293b;
+    min-height: 100vh;
+    width: 100%;
+}
+
 .container {
     min-height: 100vh;
     padding: 32px;
@@ -9,10 +15,10 @@
 .errorCard {
     text-align: center;
     padding: 60px 40px;
-    background: var(--bg-card);
+    background: rgba(30, 41, 59, 0.85);
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
 }
 
 .spinner {
@@ -80,9 +86,10 @@
     gap: 24px;
     margin-bottom: 32px;
     padding: 24px;
-    background: var(--bg-card);
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(12px);
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border-subtle);
+    border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .scoreCircle {
@@ -117,6 +124,10 @@
     border: 1px solid var(--border-subtle);
 }
 
+.recBadge[data-rec="no"] {
+    color: #ef4444;
+}
+
 .section {
     margin-bottom: 32px;
 }
@@ -129,14 +140,14 @@
 }
 
 .glass {
-    background: var(--bg-card);
+    background: rgba(30, 41, 59, 0.75);
     backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
     padding: 20px;
-    color: var(--text-secondary);
+    color: #e2e8f0;
     line-height: 1.7;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
 }
 
 .swGrid {
@@ -153,10 +164,10 @@
 .bulletList li {
     padding: 6px 0;
     padding-left: 16px;
-    border-left: 3px solid var(--border-medium);
+    border-left: 3px solid #6366f1;
     margin-bottom: 8px;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
+    font-size: 0.95rem;
+    color: #e2e8f0;
 }
 
 .questionList {
@@ -166,8 +177,8 @@
 }
 
 .questionCard {
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-lg);
     padding: 20px;
     transition: all var(--transition-base);
@@ -201,18 +212,18 @@
 
 .qText {
     font-weight: 600;
-    color: var(--text-primary);
+    color: #ffffff;
     margin-bottom: 8px;
-    font-size: 0.95rem;
+    font-size: 1rem;
     line-height: 1.5;
 }
 
 .qAnswer {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
+    color: #e2e8f0;
+    font-size: 0.95rem;
     line-height: 1.6;
     padding: 12px;
-    background: var(--bg-glass);
+    background: rgba(255, 255, 255, 0.05);
     border-radius: var(--radius-md);
     margin-bottom: 8px;
 }

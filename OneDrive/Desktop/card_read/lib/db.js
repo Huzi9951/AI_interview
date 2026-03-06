@@ -85,7 +85,9 @@ export async function completeInterview(interviewId, {
         .eq('id', interviewId)
         .select()
         .single();
-    if (error) console.error('completeInterview error:', error);
+    if (error) {
+        console.error('completeInterview error:', error.message || JSON.stringify(error));
+    }
     return data;
 }
 
@@ -97,42 +99,86 @@ export async function deleteInterview(id) {
     return true;
 }
 
+/** Completely wipe all candidate data including videos based on email */
+export async function deleteCandidateDataCompletely(email) {
+    if (!email) return false;
+    try {
+        const res = await fetch('/api/delete-candidate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            console.error('deleteCandidateDataCompletely error:', data.error);
+            return false;
+        }
+        return data.success;
+    } catch (err) {
+        console.error('deleteCandidateDataCompletely error:', err);
+        return false;
+    }
+}
+
+/** Completely wipe all interview and recording data related to a job_id */
+export async function deleteJobDataCompletely(jobId) {
+    if (!jobId) return false;
+    try {
+        const res = await fetch('/api/delete-job', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            console.error('deleteJobDataCompletely error:', data.error);
+            return false;
+        }
+        return data.success;
+    } catch (err) {
+        console.error('deleteJobDataCompletely error:', err);
+        return false;
+    }
+}
+
 // =============================================
 // Recording Upload
 // =============================================
 
-/** Upload recording blob to Supabase Storage (with retry) */
+/** Upload recording blob securely via API route (bypass RLS) */
 export async function uploadRecording(interviewId, blob) {
-    if (!supabase || !blob) return null;
+    if (!blob) return null;
     console.log(`uploadRecording: blob size = ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
     if (blob.size === 0) {
         console.warn('uploadRecording: blob is empty, skipping upload.');
         return null;
     }
 
-    const fileName = `recordings/${interviewId}_${Date.now()}.webm`;
     let lastError = null;
 
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-            const { data, error } = await supabase.storage
-                .from('interview-recordings')
-                .upload(fileName, blob, {
-                    contentType: 'video/webm',
-                    upsert: false,
-                });
-            if (error) {
-                lastError = error;
-                console.warn(`uploadRecording attempt ${attempt} failed:`, error.message);
+            const formData = new FormData();
+            formData.append('file', blob, 'recording.webm');
+            formData.append('interviewId', interviewId);
+
+            const res = await fetch('/api/upload-recording', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                lastError = new Error(data.error || 'Upload failed');
+                console.warn(`uploadRecording attempt ${attempt} failed:`, lastError.message);
                 if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
                 continue;
             }
 
-            const { data: urlData } = supabase.storage
-                .from('interview-recordings')
-                .getPublicUrl(fileName);
-            console.log('uploadRecording success:', urlData?.publicUrl);
-            return urlData?.publicUrl || null;
+            console.log('uploadRecording success:', data.url);
+            return data.url || null;
+
         } catch (err) {
             lastError = err;
             console.warn(`uploadRecording attempt ${attempt} exception:`, err.message);

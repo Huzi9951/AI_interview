@@ -423,14 +423,15 @@
 }
 
 .modal {
-    background: #fff;
+    background: #1e293b;
     border-radius: 16px;
     width: 100%;
     max-width: 600px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    color: #f8fafc;
 }
 
 .modalHeader {
@@ -444,7 +445,7 @@
 .modalTitle {
     font-size: 1.15rem;
     font-weight: 800;
-    color: #1a1a2e;
+    color: #ffffff;
 }
 
 .modalSubtitle {
@@ -464,7 +465,7 @@
 }
 
 .modalClose:hover {
-    color: #1a1a2e;
+    color: #ffffff;
 }
 
 .modalBody {
@@ -478,8 +479,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 24px;
-    border-bottom: 1px solid #e8e8ef;
-    background: #fafbfc;
+    border-bottom: 1px solid #334155;
+    background: #0f172a;
 }
 
 .modalCheckLabel {
@@ -488,7 +489,7 @@
     gap: 10px;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #1a1a2e;
+    color: #f8fafc;
     cursor: pointer;
 }
 
@@ -515,13 +516,13 @@
     align-items: center;
     gap: 12px;
     padding: 12px 24px;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid #334155;
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .modalCandidateRow:hover {
-    background: #fafbfc;
+    background: #0f172a;
 }
 
 .modalCandidateInfo {
@@ -533,7 +534,7 @@
 .modalCandidateName {
     font-size: 0.88rem;
     font-weight: 600;
-    color: #1a1a2e;
+    color: #ffffff;
 }
 
 .modalCandidateEmail {
@@ -556,14 +557,14 @@
 /* Custom Questions Section */
 .modalQuestionsSection {
     padding: 20px 24px;
-    border-top: 1px solid #e8e8ef;
-    background: #fafbfc;
+    border-top: 1px solid #334155;
+    background: #0f172a;
 }
 
 .modalQuestionsTitle {
     font-size: 0.9rem;
     font-weight: 700;
-    color: #1a1a2e;
+    color: #ffffff;
     margin-bottom: 4px;
 }
 
@@ -588,11 +589,11 @@
 .modalQuestionInput {
     flex: 1;
     padding: 10px 14px;
-    border: 1px solid #e8e8ef;
+    border: 1px solid #475569;
     border-radius: 8px;
     font-size: 0.85rem;
-    color: #1a1a2e;
-    background: #fff;
+    color: #f8fafc;
+    background: #1e293b;
     outline: none;
     font-family: inherit;
     transition: border-color 0.2s;
@@ -639,24 +640,25 @@
     justify-content: flex-end;
     gap: 12px;
     padding: 20px 24px;
-    border-top: 1px solid #e8e8ef;
+    border-top: 1px solid #334155;
 }
 
 .modalCancel {
     padding: 10px 20px;
-    border: 1px solid #e8e8ef;
+    border: 1px solid #475569;
     border-radius: 10px;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #6b7280;
-    background: #fff;
+    color: #94a3b8;
+    background: transparent;
     cursor: pointer;
     transition: all 0.2s;
     font-family: inherit;
 }
 
 .modalCancel:hover {
-    background: #f3f4f6;
+    background: #334155;
+    color: #ffffff;
 }
 
 .modalSend {
@@ -939,16 +941,36 @@
     background: #fee2e2;
 }
 
+.actionAnalytics {
+    padding: 5px 12px;
+    background: #eef2ff;
+    color: #6366f1;
+    border: 1px solid #c7d2fe;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.actionAnalytics:hover {
+    background: #e0e7ff;
+    border-color: #a5b4fc;
+}
+
 /* ═══ Invite Form Sections ═══ */
 .inviteFormSection {
     padding: 20px 24px;
-    border-bottom: 1px solid #e8e8ef;
+    border-bottom: 1px solid #334155;
 }
 
 .inviteLabel {
     font-size: 0.85rem;
     font-weight: 700;
-    color: #1a1a2e;
+    color: #ffffff;
     display: block;
     margin-bottom: 10px;
 }
@@ -963,10 +985,11 @@
 .expiryInput {
     width: 80px;
     padding: 8px 12px;
-    border: 1px solid #e8e8ef;
+    border: 1px solid #475569;
     border-radius: 8px;
     font-size: 0.9rem;
-    color: #1a1a2e;
+    color: #f8fafc;
+    background: #1e293b;
     outline: none;
     font-family: inherit;
     text-align: center;
@@ -989,11 +1012,11 @@
 
 .expiryPreset {
     padding: 5px 12px;
-    border: 1px solid #e8e8ef;
+    border: 1px solid #475569;
     border-radius: 6px;
     font-size: 0.78rem;
-    background: #fff;
-    color: #6b7280;
+    background: transparent;
+    color: #94a3b8;
     cursor: pointer;
     transition: all 0.15s;
     font-family: inherit;
@@ -1016,11 +1039,12 @@
     align-items: flex-start;
     gap: 14px;
     padding: 16px 24px;
-    background: #f8f9fa;
-    font-size: 0.82rem;
-    color: #4b5563;
+    background: #0f172a;
+    font-size: 0.85rem;
+    color: #cbd5e1;
     line-height: 1.7;
-    border-top: 1px solid #e8e8ef;
+    border-top: 1px solid #334155;
+    border-radius: 8px;
 }
 
 .invitePreviewIcon {

@@ -3,8 +3,10 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import styles from './report.module.css';
+import { useDashboard } from '@/context/DashboardContext';
 
 function ReportContent() {
+    const { state, dispatch } = useDashboard();
     const searchParams = useSearchParams();
     const [interviews, setInterviews] = useState([]);
     const [selected, setSelected] = useState(null);
@@ -107,6 +109,20 @@ function ReportContent() {
     const violations = selected.violations || [];
     const timestamps = report.questionTimestamps || [];
 
+    const candidate = selected ? state.candidates.find(c => c.email === selected.candidate_email || c.email === email) : null;
+    const currentJobId = selected?.job_id || candidate?.jobAssignments?.[0]?.jobId;
+    const jobAssignment = candidate?.jobAssignments?.find(a => a.jobId === currentJobId) || candidate?.jobAssignments?.[0];
+    const currentStatus = jobAssignment?.status || candidate?.jobStatus || 'interviewed';
+
+    const handleStatusUpdate = (newStatus) => {
+        if (!candidate || (!currentJobId && !jobAssignment)) return;
+        dispatch({
+            type: 'UPDATE_CANDIDATE_JOB_STATUS',
+            payload: { candidateId: candidate.id, jobId: currentJobId || jobAssignment.jobId, status: newStatus }
+        });
+        alert(`Candidate ${newStatus} successfully!`);
+    };
+
     return (
         <div className={styles.container}>
             {interviews.length > 1 && (
@@ -123,9 +139,37 @@ function ReportContent() {
                         {selected.candidate_name || selected.candidate_email} • {selected.job_title}
                     </p>
                 </div>
-                <div className={styles.headerMeta}>
-                    <span>Started: {selected.started_at ? new Date(selected.started_at).toLocaleString() : '—'}</span>
-                    <span>Completed: {selected.completed_at ? new Date(selected.completed_at).toLocaleString() : '—'}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                    <div className={styles.headerMeta}>
+                        <span>Started: {selected.started_at ? new Date(selected.started_at).toLocaleString() : '—'}</span>
+                        <span>Completed: {selected.completed_at ? new Date(selected.completed_at).toLocaleString() : '—'}</span>
+                    </div>
+                    {candidate && (currentJobId || jobAssignment) && (
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                            <button
+                                onClick={() => handleStatusUpdate('accepted')}
+                                disabled={currentStatus === 'accepted'}
+                                style={{
+                                    padding: '8px 16px', borderRadius: '8px', border: 'none', fontWeight: 600, cursor: 'pointer',
+                                    background: currentStatus === 'accepted' ? '#f0fdf4' : '#22c55e',
+                                    color: currentStatus === 'accepted' ? '#22c55e' : '#fff',
+                                    opacity: currentStatus === 'accepted' ? 0.7 : 1, transition: 'all 0.2s'
+                                }}>
+                                ✅ {currentStatus === 'accepted' ? 'Accepted' : 'Accept Candidate'}
+                            </button>
+                            <button
+                                onClick={() => handleStatusUpdate('rejected')}
+                                disabled={currentStatus === 'rejected'}
+                                style={{
+                                    padding: '8px 16px', borderRadius: '8px', border: 'none', fontWeight: 600, cursor: 'pointer',
+                                    background: currentStatus === 'rejected' ? '#fef2f2' : '#ef4444',
+                                    color: currentStatus === 'rejected' ? '#ef4444' : '#fff',
+                                    opacity: currentStatus === 'rejected' ? 0.7 : 1, transition: 'all 0.2s'
+                                }}>
+                                ❌ {currentStatus === 'rejected' ? 'Rejected' : 'Reject Candidate'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -181,7 +225,11 @@ function ReportContent() {
                             <div key={i} className={styles.questionCard}>
                                 <div className={styles.qHeader}>
                                     <span className={styles.qNum}>Q{i + 1}</span>
-                                    <span className={styles.qScore}>{q.score || 0}/10</span>
+                                    <span className={styles.qScore}>
+                                        {q.graded === false || eval_.graded === false
+                                            ? 'Not Graded'
+                                            : `${q.score !== null && q.score !== undefined ? q.score : 0}/10`}
+                                    </span>
                                 </div>
                                 <div className={styles.qText}>{q.question || q}</div>
                                 <div className={styles.qAnswer}>
@@ -193,11 +241,14 @@ function ReportContent() {
                                         {ts.answeredAt && ` → Answered: ${new Date(ts.answeredAt).toLocaleTimeString()}`}
                                     </div>
                                 )}
-                                <div className={styles.qMeta}>
-                                    <span>Depth: {eval_.technical_depth || 0}/10</span>
-                                    <span>Clarity: {eval_.clarity || 0}/10</span>
-                                    <span>Relevance: {eval_.relevance || 0}/10</span>
-                                </div>
+                                {/* Timestamp video snippet temporarily removed per request */}
+                                {q.graded !== false && eval_.graded !== false && (
+                                    <div className={styles.qMeta}>
+                                        <span>Depth: {eval_.technical_depth || 0}/10</span>
+                                        <span>Clarity: {eval_.clarity || 0}/10</span>
+                                        <span>Relevance: {eval_.relevance || 0}/10</span>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
@@ -247,12 +298,14 @@ function ReportContent() {
 
 export default function CandidateReportPage() {
     return (
-        <Suspense fallback={
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)' }}>
-                <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
-            </div>
-        }>
-            <ReportContent />
-        </Suspense>
+        <div className={styles.pageWrapper}>
+            <Suspense fallback={
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#1e293b' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
+                </div>
+            }>
+                <ReportContent />
+            </Suspense>
+        </div>
     );
 }

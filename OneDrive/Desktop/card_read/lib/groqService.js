@@ -83,6 +83,29 @@ Extract as much information as possible. For fields not found in the JD, use rea
 }
 
 // =============================================
+// 0.5) Extract Contact Info From Resume
+// =============================================
+export async function extractContactInfoFromResume(resumeText) {
+    const messages = [
+        {
+            role: 'system',
+            content: `You are an expert HR text extraction AI. Extract the candidate's name, email address, and phone number from the provided resume text.
+Output MUST be valid JSON with this exact structure:
+{
+  "name": "full name or empty string if not found",
+  "email": "primary email address or empty string",
+  "phone": "primary phone number or empty string"
+}`
+        },
+        {
+            role: 'user',
+            content: `RESUME TEXT:\n${resumeText.substring(0, 4000)}`
+        }
+    ];
+    return await chatCompletion(messages, 0.1);
+}
+
+// =============================================
 // 1) Analyze JD + Resume
 // =============================================
 export async function analyzeJDAndResume(jd, resumeText) {
@@ -137,6 +160,7 @@ export async function generateQuestion(context) {
 
 Rules:
 - This is question ${questionNumber} of a maximum ${maxQuestions} question interview.
+- The candidate will be answering verbally in a live audio interview. Ensure the question is conversational, clear, and natural to speak.
 - Keep questions concise and clear (1-3 sentences max).
 - Questions should feel conversational and natural, as if a real interviewer is asking.
 - Adapt based on previous answers:
@@ -161,14 +185,16 @@ Return JSON: { "question": "your question text here", "target_skill": "skill bei
 // =============================================
 // 2b) Batch Generate Interview Questions (for HR preview)
 // =============================================
-export async function generateInterviewQuestions(jobDescription, count = 4) {
+export async function generateInterviewQuestions(jobDescription) {
     const messages = [
         {
             role: 'system',
-            content: `You are a professional technical interviewer. Generate exactly ${count} interview questions based on the job description provided.
+            content: `You are a professional technical interviewer. Your task is to generate a comprehensive set of interview questions based ONLY on the provided job description.
+CRITICAL: You must independently determine the ideal number of questions to ask (typically between 3 and 10 questions) to thoroughly assess all the core skills and requirements outlined in the JD.
 
 Rules:
 - Questions must be directly relevant to the job description and required skills.
+- The candidate will be answering verbally in a live audio interview. Ensure the questions are conversational, clear, and natural to speak.
 - Mix difficulty levels: start easy, then medium, then hard.
 - Questions should be concise and clear (1-3 sentences).
 - Include a mix of technical knowledge, problem-solving, and scenario-based questions.
@@ -178,7 +204,7 @@ Return JSON: { "questions": [{ "question": "text", "target_skill": "skill being 
         },
         {
             role: 'user',
-            content: `JOB DESCRIPTION:\n${jobDescription}\n\nGenerate ${count} interview questions.`
+            content: `JOB DESCRIPTION:\n${jobDescription}\n\nAnalyze this JD and generate the necessary interview questions.`
         }
     ];
     return await chatCompletion(messages, 0.6);
@@ -220,11 +246,19 @@ Be precise and honest in your scoring. Do NOT inflate scores.
 - Score 6-7: Average, correct but lacks depth
 - Score 8-9: Good, demonstrates strong understanding
 - Score 10: Exceptional, expert-level answer
-${context.expectedAnswer ? '\nIMPORTANT: An expected answer has been provided by the hiring manager. Compare the candidate\'s answer against it. The closer the candidate\'s answer aligns with the expected answer (in substance, not necessarily wording), the higher the score should be.' : ''}
+${context.expectedAnswer ? "\\nIMPORTANT: An expected answer has been provided by the hiring manager. Compare the candidate's answer against it. The closer the candidate's answer aligns with the expected answer (in substance, not necessarily wording), the higher the score should be." : ""}
+${context.isCustomQuestion && !context.expectedAnswer ? `\nIMPORTANT: This is a manually added custom question, and no expected answer was provided.
+Determine if the question is technical or non-technical (e.g., behavioral, HR, introductory).
+If it is a NON-TECHNICAL question, you MUST set "graded" to false and "score" to null, because non-technical questions should not be graded.
+If it is a TECHNICAL question, evaluate the technical accuracy relying on your own knowledge and set "graded" to true.` : ""}
 
-Return JSON with this EXACT structure:
+IMPORTANT: If the question being evaluated is ALREADY a follow-up question, you MUST set "follow_up_needed" to false to prevent infinite follow-ups.
+
+Return JSON with this EXACT structure (if graded is false, scores can be null):
 {
-  "score": 0-10,
+  "score": 0-10, // or null if graded is false
+  "graded": true/false, // set to false for non-technical custom queries lacking an expected answer
+  "technical_depth": 0-10,
   "technical_depth": 0-10,
   "clarity": 0-10,
   "relevance": 0-10,
@@ -242,7 +276,7 @@ Return JSON with this EXACT structure:
         }
     ];
     const result = await chatCompletion(messages, 0.2);
-    return { ...result, graded: true };
+    return { graded: true, ...result };
 }
 
 // =============================================
@@ -338,7 +372,7 @@ export async function generateFinalReport(interviewData) {
             gradedCount++;
             gradedTotal += (evaluations[i].score || 0);
         } else if (!isGraded) {
-            interviewTranscript += `\n[Not graded — not relevant to JD]`;
+            interviewTranscript += `\n[Not graded — non-technical or not relevant to JD]`;
         }
     }
 

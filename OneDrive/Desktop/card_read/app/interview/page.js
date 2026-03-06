@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
+import { getSharedCameraStream, getSharedMicStream, stopAllSharedStreams } from '@/lib/mediaStore';
 
-const SILENCE_NO_SPEECH = 13000;
+const SILENCE_NO_SPEECH = 20000;
 const SILENCE_AFTER_SPEECH = 7000;
 const FACE_CHECK_INTERVAL = 1000;
 
@@ -42,7 +43,8 @@ function InterviewContent() {
     const [questionIndex, setQuestionIndex] = useState(0);
     const questionIndexRef = useRef(0);
     const mainQuestionIndexRef = useRef(0); // tracks only main questions (not follow-ups)
-    const followUpCountRef = useRef(0); // total follow-ups asked
+    const followUpCountRef = useRef(0);
+    const recordingStartTimeRef = useRef(null); // total follow-ups asked
     const isFollowUpRef = useRef(false); // whether current question is a follow-up
     const [displayHistory, setDisplayHistory] = useState([]);
 
@@ -200,8 +202,7 @@ function InterviewContent() {
     // =============================================
     useEffect(() => {
         if (interviewData && consentGiven) {
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => { stream.getTracks().forEach(t => t.stop()); })
+            getSharedMicStream()
                 .catch(err => console.error('Mic permission denied:', err));
         }
     }, [interviewData, consentGiven]);
@@ -212,10 +213,7 @@ function InterviewContent() {
     useEffect(() => {
         async function startCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480, facingMode: 'user' },
-                    audio: false,
-                });
+                const stream = await getSharedCameraStream();
                 streamRef.current = stream;
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
@@ -227,11 +225,9 @@ function InterviewContent() {
         }
         if (interviewData && consentGiven) startCamera();
         return () => {
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach((t) => t.stop());
-            }
+            // Only detach UI stream, don't stop tracks to prevent breaking active mediaStore recordings
             if (videoRef.current?.srcObject) {
-                videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
+                videoRef.current.srcObject = null;
             }
         };
     }, [interviewData, consentGiven]);
@@ -240,7 +236,8 @@ function InterviewContent() {
     // Attach camera stream when phase changes
     // =============================================
     useEffect(() => {
-        if ((phase === 'live' || phase === 'completed') && videoRef.current && streamRef.current) {
+        const activePhases = ['ready', 'asking', 'listening', 'evaluating', 'silencePrompt', 'done'];
+        if (activePhases.includes(phase) && videoRef.current && streamRef.current) {
             if (videoRef.current.srcObject !== streamRef.current) {
                 videoRef.current.srcObject = streamRef.current;
                 setCameraActive(true);
@@ -350,8 +347,12 @@ function InterviewContent() {
                 const { startRecording } = await import('@/lib/recordingService');
                 // Pass existing camera stream if available to avoid re-acquiring
                 const cameraStream = videoRef.current?.srcObject || null;
-                const ok = await startRecording(cameraStream);
-                if (!ok) console.warn('Recording failed to start — interview continues without recording');
+                const result = await startRecording(cameraStream);
+                if (!result || !result.success) {
+                    console.warn('Recording failed to start — interview continues without recording');
+                } else {
+                    recordingStartTimeRef.current = result.startTime;
+                }
             } catch (e) {
                 console.warn('Recording import failed:', e);
             }
@@ -453,12 +454,14 @@ function InterviewContent() {
         if (!questionsRef.current._isFollowUp) questionsRef.current._isFollowUp = [];
         questionsRef.current._isFollowUp[questionsRef.current.length - 1] = isFollowUpRef.current;
 
-        // Record timestamp for this question
+        // Record timestamp for this question right before AI speaks (updated: set video start time after it speaks)
         questionTimestampsRef.current = [...questionTimestampsRef.current, {
             questionIndex: questionsRef.current.length - 1,
             question: questionText,
             askedAt: new Date().toISOString(),
+            videoStartTime: null, // will be set after speak
             answeredAt: null,
+            videoEndTime: null,
             isFollowUp: isFollowUpRef.current,
         }];
 
@@ -468,6 +471,13 @@ function InterviewContent() {
             setIsSpeaking(true);
             await speak(questionText);
             setIsSpeaking(false);
+
+            // Start video snippet right as candidate is expected to answer
+            const listenOffset = recordingStartTimeRef.current ? Math.max(0, (Date.now() - recordingStartTimeRef.current) / 1000) : 0;
+            if (questionTimestampsRef.current[questionTimestampsRef.current.length - 1]) {
+                questionTimestampsRef.current[questionTimestampsRef.current.length - 1].videoStartTime = listenOffset;
+            }
+
             startListeningPhase();
         } catch (err) {
             console.error('Speech error:', err);
@@ -518,6 +528,29 @@ function InterviewContent() {
         if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
         if (speechStoppedTimerRef.current) { clearTimeout(speechStoppedTimerRef.current); speechStoppedTimerRef.current = null; }
     };
+
+    // =============================================
+    // Global Unmount Cleanup
+    // =============================================
+    useEffect(() => {
+        return () => {
+            // Unconditionally kill all streams and STT/TTS when navigating away (like to Thank You page)
+            import('@/lib/speechService').then(s => { s.stopListening(); s.stopSpeaking(); }).catch(() => { });
+            import('@/lib/recordingService').then(r => r.stopRecording()).catch(() => { });
+            import('@/lib/mediaStore').then(m => m.stopAllSharedStreams()).catch(() => { });
+
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+                streamRef.current = null;
+            }
+            if (videoRef.current?.srcObject) {
+                const tracks = videoRef.current.srcObject.getTracks ? videoRef.current.srcObject.getTracks() : [];
+                tracks.forEach(t => t.stop());
+                videoRef.current.srcObject = null;
+            }
+            clearAllTimers();
+        };
+    }, []);
 
     // =============================================
     // Offer to repeat question
@@ -585,8 +618,10 @@ function InterviewContent() {
         const answer = currentAnswerRef.current.trim() || '[No response]';
 
         // Record answer timestamp
+        const endOffset = recordingStartTimeRef.current ? Math.max(0, (Date.now() - recordingStartTimeRef.current) / 1000) : 0;
         if (questionTimestampsRef.current[questionIndexRef.current]) {
             questionTimestampsRef.current[questionIndexRef.current].answeredAt = new Date().toISOString();
+            questionTimestampsRef.current[questionIndexRef.current].videoEndTime = endOffset;
         }
 
         await processAnswer(answer);
@@ -597,8 +632,10 @@ function InterviewContent() {
         const { stopListening } = await import('@/lib/speechService');
         stopListening();
 
+        const endOffset = recordingStartTimeRef.current ? Math.max(0, (Date.now() - recordingStartTimeRef.current) / 1000) : 0;
         if (questionTimestampsRef.current[questionIndexRef.current]) {
             questionTimestampsRef.current[questionIndexRef.current].answeredAt = new Date().toISOString();
+            questionTimestampsRef.current[questionIndexRef.current].videoEndTime = endOffset;
         }
 
         await processAnswer(answer || '[No response provided]');
@@ -630,6 +667,7 @@ function InterviewContent() {
                 jobDescription: interviewDataRef.current.jobDescription || '',
                 expectedAnswer,
                 isJDRelevant,
+                isCustomQuestion: currentQIdx < customQuestionsRef.current.length,
             });
             evaluation.isFollowUp = wasFollowUp;
             evaluationsRef.current = [...evaluationsRef.current, evaluation];
@@ -714,7 +752,9 @@ function InterviewContent() {
                 questionIndex: questionsRef.current.length - 1,
                 question: questionText,
                 askedAt: new Date().toISOString(),
+                videoStartTime: null, // will set after speak
                 answeredAt: null,
+                videoEndTime: null,
                 isFollowUp: true,
             }];
 
@@ -725,6 +765,13 @@ function InterviewContent() {
             setIsSpeaking(true);
             await speak(questionText);
             setIsSpeaking(false);
+
+            // Start video snippet right as candidate is expected to answer
+            const listenOffset = recordingStartTimeRef.current ? Math.max(0, (Date.now() - recordingStartTimeRef.current) / 1000) : 0;
+            if (questionTimestampsRef.current[questionTimestampsRef.current.length - 1]) {
+                questionTimestampsRef.current[questionTimestampsRef.current.length - 1].videoStartTime = listenOffset;
+            }
+
             startListeningPhase();
         } catch (err) {
             console.error('Follow-up question error:', err);
@@ -746,18 +793,25 @@ function InterviewContent() {
             stopListening(); stopSpeaking();
         } catch (e) { }
 
-        // Turn off camera
+        // Turn off camera and mic entirely
+        try {
+            const { stopAllSharedStreams } = await import('@/lib/mediaStore');
+            stopAllSharedStreams();
+        } catch (e) { }
+
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(t => t.stop());
             streamRef.current = null;
         }
         if (videoRef.current?.srcObject) {
-            videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+            if (videoRef.current.srcObject.getTracks) {
+                videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+            }
             videoRef.current.srcObject = null;
         }
         setCameraActive(false);
 
-        setPhase('done');
+        setPhase('processing'); // Moved from 'done' so UI hides camera definitely
         setProcessingMsg('Processing your interview...');
 
         // Stop recording and AWAIT the upload
@@ -804,6 +858,7 @@ function InterviewContent() {
                 jobDescription: interviewDataRef.current.jobDescription,
                 resumeFileName: interviewDataRef.current.resumeFileName,
                 questionTimestamps: questionTimestampsRef.current,
+                recordingUrl,
             };
             sessionStorage.setItem('visionhire_report', JSON.stringify(reportPayload));
 
@@ -811,14 +866,21 @@ function InterviewContent() {
             try {
                 const { completeInterview } = await import('@/lib/db');
                 if (interviewIdRef.current) {
+
+                    // Sanitize objects before DB insertion to prevent Supabase type errors
+                    const cleanQuestions = JSON.parse(JSON.stringify(questionsWithTimestamps));
+                    const cleanViolations = JSON.parse(JSON.stringify(violationsRef.current));
+                    const cleanReportData = JSON.parse(JSON.stringify({ ...finalReport, questionTimestamps: questionTimestampsRef.current }));
+                    const cleanSkillAnalysis = JSON.parse(JSON.stringify(interviewDataRef.current.skillAnalysis || {}));
+
                     await completeInterview(interviewIdRef.current, {
-                        questions: questionsWithTimestamps,
-                        violations: violationsRef.current,
-                        reportData: { ...finalReport, questionTimestamps: questionTimestampsRef.current },
+                        questions: cleanQuestions,
+                        violations: cleanViolations,
+                        reportData: cleanReportData,
                         overallScore: finalReport.overall_score || 0,
                         hireRecommendation: finalReport.hire_recommendation || '',
                         recordingUrl,
-                        skillAnalysis: interviewDataRef.current.skillAnalysis,
+                        skillAnalysis: cleanSkillAnalysis,
                     });
                 }
             } catch (e) { console.warn('DB save failed:', e); }

@@ -5,6 +5,8 @@
 const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY;
 const TTS_SAMPLE_RATE = 24000;
 
+import { getSharedMicStream } from './mediaStore';
+
 // =============================================
 // Shared AudioContext
 // =============================================
@@ -235,7 +237,9 @@ export function startListening(onUpdate) {
     finalTranscript = '';
     lastTranscriptLength = 0;
 
-    navigator.mediaDevices.getUserMedia({ audio: true })
+    let fallbackActive = false;
+
+    getSharedMicStream()
         .then((stream) => {
             mediaStream = stream;
 
@@ -296,10 +300,21 @@ export function startListening(onUpdate) {
 
             ws.onerror = (err) => {
                 console.error('Deepgram WebSocket error:', err);
+                if (!fallbackActive) {
+                    fallbackActive = true;
+                    console.log('Falling back to Web Speech API due to Deepgram error');
+                    fallbackStartListening(onUpdate);
+                }
             };
 
             ws.onclose = (event) => {
                 console.log('Deepgram WebSocket closed:', event.code, event.reason);
+                // Codes other than 1000 (Normal) and 1005 (No Status) suggest a failure
+                if (event.code !== 1000 && event.code !== 1005 && !fallbackActive) {
+                    fallbackActive = true;
+                    console.log('Falling back to Web Speech API due to abnormal Deepgram closure');
+                    fallbackStartListening(onUpdate);
+                }
             };
         })
         .catch((err) => {
@@ -336,7 +351,8 @@ export function stopListening() {
     }
 
     if (mediaStream) {
-        mediaStream.getTracks().forEach(t => t.stop());
+        // We no longer stop the tracks here because it's a shared stream!
+        // mediaStream.getTracks().forEach(t => t.stop());
         mediaStream = null;
     }
 }
@@ -371,6 +387,9 @@ function fallbackStartListening(onUpdate) {
     fallbackRecognition.continuous = true;
     fallbackRecognition.interimResults = true;
     fallbackRecognition.lang = 'en-US';
+
+    // Note: Web Speech API handles mic internally.
+    // We just start it.
 
     let fallbackFinalTranscript = '';
 

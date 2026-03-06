@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { candidates, jobTitle, jobId, jobDescription, expiryHours, customQuestions } = body;
+        const { candidates, jobTitle, jobId, jobDescription, expiryHours, customQuestions, questionCount } = body;
 
         if (!candidates || !candidates.length || !jobTitle) {
             return Response.json({ error: 'Missing required fields' }, { status: 400 });
@@ -34,6 +34,7 @@ export async function POST(request) {
                     jobId,
                     jobDescription: jobDescription || '',
                     customQuestions: customQuestions || [],
+                    questionCount: questionCount || (customQuestions || []).length || 6,
                     expiresAt: Date.now() + (expiryHours || 48) * 60 * 60 * 1000,
                     createdAt: Date.now(),
                 };
