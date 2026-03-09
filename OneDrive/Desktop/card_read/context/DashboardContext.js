@@ -4,7 +4,7 @@ import { createContext, useContext, useReducer, useEffect, useCallback } from 'r
 
 const DashboardContext = createContext(null);
 
-const STORAGE_KEY = 'visionhire_dashboard';
+const STORAGE_KEY = 'hypereval_dashboard';
 
 const sampleJobs = [
     {
@@ -203,7 +203,7 @@ function dashboardReducer(state, action) {
                     invitedFor: null,
                     interviewStatus: 'pending',
                 }));
-            return { ...state, candidates: [...state.candidates, ...newCandidates] };
+            return { ...state, candidates: [...newCandidates, ...state.candidates] };
         }
 
         case 'INVITE_CANDIDATES': {

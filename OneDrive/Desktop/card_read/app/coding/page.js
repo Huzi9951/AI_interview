@@ -25,7 +25,7 @@ export default function CodingPage() {
 
     // Load problem
     useEffect(() => {
-        const data = sessionStorage.getItem('visionhire_coding');
+        const data = sessionStorage.getItem('hypereval_coding');
         if (!data) {
             router.push('/report');
             return;
@@ -88,7 +88,7 @@ export default function CodingPage() {
             const evaluation = await evaluateCode(problem, code, language);
 
             // Store evaluation
-            const reportData = JSON.parse(sessionStorage.getItem('visionhire_report') || '{}');
+            const reportData = JSON.parse(sessionStorage.getItem('hypereval_report') || '{}');
             reportData.codingEvaluation = evaluation;
             reportData.codingSubmission = {
                 code,
@@ -98,7 +98,7 @@ export default function CodingPage() {
                 copyAttempts,
                 focusLosses,
             };
-            sessionStorage.setItem('visionhire_report', JSON.stringify(reportData));
+            sessionStorage.setItem('hypereval_report', JSON.stringify(reportData));
 
             router.push('/report');
         } catch (err) {
@@ -123,7 +123,7 @@ export default function CodingPage() {
                 <div className={styles.topBarLeft}>
                     <div className={styles.logo}>
                         <div className={styles.logoIcon}>⚡</div>
-                        HyperHire
+                        HyperEval
                     </div>
                     <span className={styles.badge}>💻 Coding Round</span>
                 </div>

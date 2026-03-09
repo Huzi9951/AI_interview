@@ -153,7 +153,7 @@ function InterviewContent() {
                 }
             } else {
                 // Admin-initiated interview via sessionStorage (setup page flow)
-                const data = sessionStorage.getItem('visionhire_setup');
+                const data = sessionStorage.getItem('hypereval_setup');
                 if (!data) { router.push('/setup'); return; }
                 const parsed = JSON.parse(data);
                 setInterviewData(parsed);
@@ -838,7 +838,7 @@ function InterviewContent() {
             const questionsWithTimestamps = questionsRef.current.map((q, i) => ({
                 question: q,
                 answer: answersRef.current[i] || '[No response]',
-                score: evaluationsRef.current[i]?.score || 0,
+                score: Math.round(evaluationsRef.current[i]?.score || 0),
                 evaluation: evaluationsRef.current[i] || {},
                 timestamp: questionTimestampsRef.current[i] || {},
             }));
@@ -860,7 +860,7 @@ function InterviewContent() {
                 questionTimestamps: questionTimestampsRef.current,
                 recordingUrl,
             };
-            sessionStorage.setItem('visionhire_report', JSON.stringify(reportPayload));
+            sessionStorage.setItem('hypereval_report', JSON.stringify(reportPayload));
 
             // Save to DB
             try {
@@ -877,7 +877,7 @@ function InterviewContent() {
                         questions: cleanQuestions,
                         violations: cleanViolations,
                         reportData: cleanReportData,
-                        overallScore: finalReport.overall_score || 0,
+                        overallScore: Math.round(finalReport.overall_score || 0),
                         hireRecommendation: finalReport.hire_recommendation || '',
                         recordingUrl,
                         skillAnalysis: cleanSkillAnalysis,
@@ -888,7 +888,7 @@ function InterviewContent() {
             // Update localStorage dashboard state (candidate status -> completed with score)
             try {
                 const iData = interviewDataRef.current;
-                const dashData = JSON.parse(localStorage.getItem('visionhire_dashboard') || '{}');
+                const dashData = JSON.parse(localStorage.getItem('hypereval_dashboard') || '{}');
                 if (iData.candidateEmail) {
                     if (!dashData.candidates) dashData.candidates = [];
                     const existingIdx = dashData.candidates.findIndex(c => c.email === iData.candidateEmail);
@@ -935,7 +935,7 @@ function InterviewContent() {
                         });
                     }
                     dashData.interviewCount = (dashData.interviewCount || 0) + 1;
-                    localStorage.setItem('visionhire_dashboard', JSON.stringify(dashData));
+                    localStorage.setItem('hypereval_dashboard', JSON.stringify(dashData));
                 }
             } catch (e) { console.warn('Dashboard update failed:', e); }
 
@@ -947,7 +947,7 @@ function InterviewContent() {
                 router.push('/thankyou');
             } else if (interviewDataRef.current.includeCodingRound) {
                 const codingProblem = await generateCodingProblem(interviewDataRef.current.skillAnalysis);
-                sessionStorage.setItem('visionhire_coding', JSON.stringify(codingProblem));
+                sessionStorage.setItem('hypereval_coding', JSON.stringify(codingProblem));
                 router.push('/coding');
             } else {
                 router.push('/report');

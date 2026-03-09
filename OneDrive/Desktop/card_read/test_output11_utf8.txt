@@ -1,0 +1,78 @@
+﻿
+Running 45 tests using 4 workers
+
+  ✓   3 [chromium] › tests\auth.spec.ts:5:9 › Authentication Flow › should verify the login page contains required elements (1.6s)
+  ✓   1 [chromium] › tests\auth.spec.ts:44:9 › Authentication Flow › should allow toggling to Sign Up view (1.8s)
+  ✓   6 [chromium] › tests\candidates.spec.ts:34:9 › Candidates Management › should select candidate and open invite modal (981ms)
+  ✓   2 [chromium] › tests\auth.spec.ts:18:9 › Authentication Flow › should show validation errors for empty fields and formatting (3.0s)
+  ✓   5 [chromium] › tests\candidates.spec.ts:9:9 › Candidates Management › should allow manually adding a candidate (1.8s)
+  ✓   8 [chromium] › tests\candidates.spec.ts:73:9 › Candidates Management › should remove a candidate if one exists (724ms)
+  ✓   7 [chromium] › tests\candidates.spec.ts:53:9 › Candidates Management › should filter candidates (1.6s)
+  ✓   9 [chromium] › tests\dashboard.spec.ts:13:9 › Dashboard Flow › should navigate to Jobs and Candidates tabs (1.3s)
+  ✓  11 [chromium] › tests\dashboard.spec.ts:58:9 › Dashboard Flow › should be able to search and filter jobs in the list (1.1s)
+  ✓   4 [chromium] › tests\auth.spec.ts:55:9 › Authentication Flow › should handle incorrect login via demo bypass or actual Supabase error (5.6s)
+  ✓  10 [chromium] › tests\dashboard.spec.ts:23:9 › Dashboard Flow › should progress through Create Job wizard and create a job (2.1s)
+  ✓  12 [chromium] › tests\dashboard.spec.ts:70:9 › Dashboard Flow › should delete a job if one exists (2.8s)
+  ✓  13 [chromium] › tests\interview-flow.spec.ts:15:9 › Interview Candidate Flow › should verify setup requirement checks (4.1s)
+  ✓  15 [chromium] › tests\interview-flow.spec.ts:40:9 › Interview Candidate Flow › should show generic interview screen structure (4.2s)
+  ✓  14 [chromium] › tests\interview-flow.spec.ts:28:9 › Interview Candidate Flow › should show coding page logic (4.2s)
+  ✓  16 [firefox] › tests\auth.spec.ts:5:9 › Authentication Flow › should verify the login page contains required elements (2.7s)
+  ✓  17 [firefox] › tests\candidates.spec.ts:9:9 › Candidates Management › should allow manually adding a candidate (3.0s)
+  ✓  21 [firefox] › tests\candidates.spec.ts:34:9 › Candidates Management › should select candidate and open invite modal (4.1s)
+  ✓  18 [firefox] › tests\auth.spec.ts:18:9 › Authentication Flow › should show validation errors for empty fields and formatting (7.3s)
+  ✓  19 [firefox] › tests\auth.spec.ts:44:9 › Authentication Flow › should allow toggling to Sign Up view (7.5s)
+  ✓  22 [firefox] › tests\candidates.spec.ts:53:9 › Candidates Management › should filter candidates (5.3s)
+  ✓  23 [firefox] › tests\candidates.spec.ts:73:9 › Candidates Management › should remove a candidate if one exists (3.5s)
+  ✓  20 [firefox] › tests\auth.spec.ts:55:9 › Authentication Flow › should handle incorrect login via demo bypass or actual Supabase error (12.2s)
+  ✓  24 [firefox] › tests\dashboard.spec.ts:13:9 › Dashboard Flow › should navigate to Jobs and Candidates tabs (4.4s)
+  ✓  26 [firefox] › tests\dashboard.spec.ts:58:9 › Dashboard Flow › should be able to search and filter jobs in the list (4.0s)
+  ✓  25 [firefox] › tests\dashboard.spec.ts:23:9 › Dashboard Flow › should progress through Create Job wizard and create a job (5.6s)
+  ✓  27 [firefox] › tests\dashboard.spec.ts:70:9 › Dashboard Flow › should delete a job if one exists (6.2s)
+  ✓  28 [firefox] › tests\interview-flow.spec.ts:15:9 › Interview Candidate Flow › should verify setup requirement checks (6.2s)
+  ✓  29 [firefox] › tests\interview-flow.spec.ts:28:9 › Interview Candidate Flow › should show coding page logic (6.1s)
+  ✓  30 [firefox] › tests\interview-flow.spec.ts:40:9 › Interview Candidate Flow › should show generic interview screen structure (5.7s)
+  ✓  31 [webkit] › tests\auth.spec.ts:5:9 › Authentication Flow › should verify the login page contains required elements (1.3s)
+  ✓  34 [webkit] › tests\auth.spec.ts:44:9 › Authentication Flow › should allow toggling to Sign Up view (1.9s)
+  ✓  33 [webkit] › tests\auth.spec.ts:18:9 › Authentication Flow › should show validation errors for empty fields and formatting (3.7s)
+  ✓  36 [webkit] › tests\candidates.spec.ts:34:9 › Candidates Management › should select candidate and open invite modal (1.1s)
+  ✓  38 [webkit] › tests\candidates.spec.ts:73:9 › Candidates Management › should remove a candidate if one exists (1.1s)
+  ✓  37 [webkit] › tests\candidates.spec.ts:53:9 › Candidates Management › should filter candidates (2.1s)
+  ✓  39 [webkit] › tests\dashboard.spec.ts:13:9 › Dashboard Flow › should navigate to Jobs and Candidates tabs (2.0s)
+  ✓  35 [webkit] › tests\auth.spec.ts:55:9 › Authentication Flow › should handle incorrect login via demo bypass or actual Supabase error (6.5s)
+  ✓  41 [webkit] › tests\dashboard.spec.ts:58:9 › Dashboard Flow › should be able to search and filter jobs in the list (1.7s)
+  ✓  40 [webkit] › tests\dashboard.spec.ts:23:9 › Dashboard Flow › should progress through Create Job wizard and create a job (4.9s)
+  ✓  42 [webkit] › tests\dashboard.spec.ts:70:9 › Dashboard Flow › should delete a job if one exists (3.5s)
+  ✘  32 [webkit] › tests\candidates.spec.ts:9:9 › Candidates Management › should allow manually adding a candidate (12.3s)
+  ✓  43 [webkit] › tests\interview-flow.spec.ts:15:9 › Interview Candidate Flow › should verify setup requirement checks (4.2s)
+  ✓  44 [webkit] › tests\interview-flow.spec.ts:28:9 › Interview Candidate Flow › should show coding page logic (3.9s)
+  ✓  45 [webkit] › tests\interview-flow.spec.ts:40:9 › Interview Candidate Flow › should show generic interview screen structure (4.0s)
+
+
+  1) [webkit] › tests\candidates.spec.ts:9:9 › Candidates Management › should allow manually adding a candidate 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('tbody').getByText('Test Candidate 1773040356602')
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 10000ms[22m
+    [2m  - waiting for locator('tbody').getByText('Test Candidate 1773040356602')[22m
+
+
+      28 |         // Verification with extended timeout to handle potential API/React load delays
+      29 |         const tbody = page.locator('tbody');
+    > 30 |         await expect(tbody.getByText(uniqueName)).toBeVisible({ timeout: 10000 });
+         |                                                   ^
+      31 |         await expect(tbody.getByText(uniqueEmail)).toBeVisible({ timeout: 10000 });
+      32 |     });
+      33 |
+        at C:\Users\MRINAL\.gemini\antigravity\scratch\AI_interview\OneDrive\Desktop\card_read\tests\candidates.spec.ts:30:51
+
+    Error Context: test-results\candidates-Candidates-Mana-9e46b-manually-adding-a-candidate-webkit\error-context.md
+
+  1 failed
+    [webkit] › tests\candidates.spec.ts:9:9 › Candidates Management › should allow manually adding a candidate 
+  44 passed (56.1s)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useDashboard } from '@/context/DashboardContext';
 import styles from './candidates.module.css';
@@ -44,6 +44,7 @@ export default function CandidatesPage() {
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [toast, setToast] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [filterJob, setFilterJob] = useState('all');
     const [filterRec, setFilterRec] = useState('all'); // 'all', 'Yes', 'No'
     const [filterHrStatus, setFilterHrStatus] = useState('all'); // 'all', 'Accepted', 'Rejected', 'Under Review'
@@ -80,6 +81,14 @@ export default function CandidatesPage() {
         };
         fetchInterviews();
     }, []);
+
+    // Debounce search input to prevent UI freezing on large lists
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
 
     const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000); };
 
@@ -156,36 +165,38 @@ export default function CandidatesPage() {
         setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
     };
 
-    const filteredCandidates = state.candidates.filter(c => {
-        const matchesSearch = !searchQuery ||
-            c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (c.name && c.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredCandidates = React.useMemo(() => {
+        return state.candidates.filter(c => {
+            const matchesSearch = !debouncedSearchQuery ||
+                c.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                (c.name && c.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()));
 
-        let matchesJob = true;
-        let matchesRec = true;
-        let matchesHr = true;
+            let matchesJob = true;
+            let matchesRec = true;
+            let matchesHr = true;
 
-        const assignments = c.jobAssignments || [];
-        const interviewData = candidateInterviews[c.email];
+            const assignments = c.jobAssignments || [];
+            const interviewData = candidateInterviews[c.email];
 
-        if (filterJob !== 'all') {
-            matchesJob = assignments.some(a => a.jobId === filterJob);
-        }
+            if (filterJob !== 'all') {
+                matchesJob = assignments.some(a => a.jobId === filterJob);
+            }
 
-        if (filterRec !== 'all') {
-            const hasYes = interviewData && interviewData.hire_recommendation && interviewData.hire_recommendation.toLowerCase().includes('yes');
-            if (filterRec === 'Yes') matchesRec = !!hasYes;
-            if (filterRec === 'No') matchesRec = interviewData && interviewData.hire_recommendation && !hasYes;
-        }
+            if (filterRec !== 'all') {
+                const hasYes = interviewData && interviewData.hire_recommendation && interviewData.hire_recommendation.toLowerCase().includes('yes');
+                if (filterRec === 'Yes') matchesRec = !!hasYes;
+                if (filterRec === 'No') matchesRec = interviewData && interviewData.hire_recommendation && !hasYes;
+            }
 
-        if (filterHrStatus !== 'all') {
-            if (filterHrStatus === 'Accepted') matchesHr = assignments.some(a => a.status === 'accepted');
-            else if (filterHrStatus === 'Rejected') matchesHr = assignments.some(a => a.status === 'rejected');
-            else if (filterHrStatus === 'Under Review') matchesHr = assignments.some(a => a.status === 'completed' || a.status === 'interviewed');
-        }
+            if (filterHrStatus !== 'all') {
+                if (filterHrStatus === 'Accepted') matchesHr = assignments.some(a => a.status === 'accepted');
+                else if (filterHrStatus === 'Rejected') matchesHr = assignments.some(a => a.status === 'rejected');
+                else if (filterHrStatus === 'Under Review') matchesHr = assignments.some(a => a.status === 'completed' || a.status === 'interviewed');
+            }
 
-        return matchesSearch && matchesJob && matchesRec && matchesHr;
-    });
+            return matchesSearch && matchesJob && matchesRec && matchesHr;
+        });
+    }, [state.candidates, debouncedSearchQuery, filterJob, filterRec, filterHrStatus, candidateInterviews]);
 
     const handleSelectAll = () => {
         if (selectedIds.size === filteredCandidates.length) setSelectedIds(new Set());
@@ -385,7 +396,7 @@ export default function CandidatesPage() {
                         {state.jobs.map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
                     </select>
                     <select className={styles.filterDropdown} value={filterHrStatus} onChange={e => setFilterHrStatus(e.target.value)}>
-                        <option value="all">👤 HR Status: All</option>
+                        <option value="all">👤 Status: All</option>
                         <option value="Accepted">✅ Accepted</option>
                         <option value="Rejected">❌ Rejected</option>
                         <option value="Under Review">⏳ Under Review</option>
@@ -476,9 +487,11 @@ export default function CandidatesPage() {
                                                     }}
                                                 >
                                                     <option value="">— Unassigned —</option>
-                                                    {state.jobs.map(j => (
-                                                        <option key={j.id} value={j.id}>{j.title}</option>
-                                                    ))}
+                                                    {state.jobs
+                                                        .filter(j => j.status === 'open' || (c.jobAssignments && c.jobAssignments.length > 0 && c.jobAssignments[0].jobId === j.id))
+                                                        .map(j => (
+                                                            <option key={j.id} value={j.id}>{j.title} {j.status === 'closed' ? '(Closed)' : ''}</option>
+                                                        ))}
                                                 </select>
 
                                                 {(c.jobAssignments || []).length > 0 && c.jobAssignments.map(a => {

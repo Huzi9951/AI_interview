@@ -24,6 +24,25 @@ export async function createInterview({ candidateEmail, candidateName, jobTitle,
     return data;
 }
 
+/** Create multiple pending interview records at once */
+export async function createInterviewsBatch(interviewsArray) {
+    if (!supabase || !interviewsArray || interviewsArray.length === 0) return null;
+    const { data, error } = await supabase
+        .from('interviews')
+        .insert(interviewsArray.map(inv => ({
+            candidate_email: inv.candidateEmail,
+            candidate_name: inv.candidateName || '',
+            job_title: inv.jobTitle || '',
+            job_id: inv.jobId || '',
+            token_hash: inv.tokenHash || null,
+            custom_questions: inv.customQuestions || [],
+            status: 'pending',
+        })))
+        .select();
+    if (error) { console.error('createInterviewsBatch error:', error); return null; }
+    return data;
+}
+
 /** Check if an interview already exists and is completed for this token */
 export async function hasCompletedInterview(tokenHash) {
     if (!supabase || !tokenHash) return false;

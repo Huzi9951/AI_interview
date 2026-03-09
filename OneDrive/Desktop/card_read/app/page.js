@@ -1,9 +1,62 @@
 'use client';
 
-import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 import styles from './page.module.css';
 
-export default function LandingPage() {
+export default function AuthPage() {
+  const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (!email || !password) {
+      setError('Please enter both email and password.');
+      setLoading(false);
+      return;
+    }
+
+    if (!supabase) {
+      // Environment without Supabase credentials - bypass auth for demo purposes
+      console.warn('Supabase not configured. Bypassing auth for demo.');
+      router.push('/dashboard');
+      return;
+    }
+
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        router.push('/dashboard');
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+
+        // Supabase returns data.user with identities if it was successful.
+        // If the server requires email confirmation, session will be null.
+        if (data.user && data.session === null) {
+          setError('Account created! Please check your email for a confirmation link before signing in.');
+          setIsLogin(true); // Switch to login view for when they come back
+        } else {
+          // Auto confirmed or email confirmations are turned off in Supabase settings
+          router.push('/dashboard');
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className={styles.landing}>
       {/* Animated Background Orbs */}
@@ -17,97 +70,78 @@ export default function LandingPage() {
       <nav className={styles.navbar}>
         <div className={styles.logo}>
           <div className={styles.logoIcon}>⚡</div>
-          <span>Hyper<span className={styles.logoGradient}>Hire</span></span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Link href="/dashboard" className={styles.navBadge} style={{ textDecoration: 'none', cursor: 'pointer' }}>📊 HR Dashboard</Link>
-          <div className={styles.navBadge}>✨ AI-Powered Interviews</div>
+          <span>Hyper<span className={styles.logoGradient}>Eval</span></span>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className={styles.hero}>
-        <div className={styles.heroBadge}>
-          <span>🔴</span> Live AI Interviewer
-        </div>
-        <h1 className={styles.heroTitle}>
-          Hire Smarter with{' '}
-          <span className={styles.heroGradient}>AI-Driven Interviews</span>
-        </h1>
-        <p className={styles.heroSub}>
-          Conduct adaptive technical interviews with an AI avatar interviewer.
-          Real-time speech analysis, intelligent proctoring, and structured hiring recommendations — all in under 8 minutes.
-        </p>
-        <div className={styles.heroCta}>
-          <Link href="/setup" className="btn-primary">
-            🚀 Start Interview
-          </Link>
-          <a href="#features" className="btn-secondary">
-            Learn More ↓
-          </a>
-        </div>
-      </section>
+      <div className={styles.authContainer}>
+        <div className={`glass-card ${styles.authCard}`}>
+          <h2 className={styles.authTitle}>
+            {isLogin ? 'Welcome Back' : 'Create Account'}
+          </h2>
+          <p className={styles.authSubtitle}>
+            {isLogin
+              ? 'Enter your credentials to access the dashboard'
+              : 'Sign up to start evaluating candidates with AI'}
+          </p>
 
-      {/* Stats */}
-      <section className={styles.stats}>
-        <div className={styles.stat}>
-          <div className={styles.statNumber}>5-8</div>
-          <div className={styles.statLabel}>Minutes Per Interview</div>
-        </div>
-        <div className={styles.stat}>
-          <div className={styles.statNumber}>4-6</div>
-          <div className={styles.statLabel}>Adaptive Questions</div>
-        </div>
-        <div className={styles.stat}>
-          <div className={styles.statNumber}>10+</div>
-          <div className={styles.statLabel}>Evaluation Metrics</div>
-        </div>
-        <div className={styles.stat}>
-          <div className={styles.statNumber}>AI</div>
-          <div className={styles.statLabel}>Powered Reports</div>
-        </div>
-      </section>
+          {error && <div className={styles.authError}>{error}</div>}
 
-      {/* Features */}
-      <section id="features" className={styles.features}>
-        <div className={styles.featuresTitle}>Platform Features</div>
-        <div className={styles.featuresGrid}>
-          <div className={`glass-card ${styles.featureCard}`}>
-            <div className={styles.featureIcon}>🤖</div>
-            <h3>AI Avatar Interviewer</h3>
-            <p>A lifelike AI avatar speaks each question aloud, creating a natural and conversational interview experience.</p>
-          </div>
-          <div className={`glass-card ${styles.featureCard}`}>
-            <div className={styles.featureIcon}>🎯</div>
-            <h3>Adaptive Questions</h3>
-            <p>Questions dynamically adapt based on JD requirements, resume strengths, skill gaps, and previous answer quality.</p>
-          </div>
-          <div className={`glass-card ${styles.featureCard}`}>
-            <div className={styles.featureIcon}>🛡️</div>
-            <h3>Smart Proctoring</h3>
-            <p>Lightweight camera-based face detection and tab-switch monitoring ensures interview integrity without being invasive.</p>
-          </div>
-          <div className={`glass-card ${styles.featureCard}`}>
-            <div className={styles.featureIcon}>📊</div>
-            <h3>Detailed Analytics</h3>
-            <p>Per-question scoring, skill gap radar charts, violation logs, and a structured hiring recommendation report.</p>
-          </div>
-          <div className={`glass-card ${styles.featureCard}`}>
-            <div className={styles.featureIcon}>💻</div>
-            <h3>Optional Coding Round</h3>
-            <p>Integrated code editor with copy-paste detection and AI-powered code evaluation for technical assessment.</p>
-          </div>
-          <div className={`glass-card ${styles.featureCard}`}>
-            <div className={styles.featureIcon}>🎙️</div>
-            <h3>Voice Recognition</h3>
-            <p>Real-time speech-to-text captures candidate responses, generating accurate transcripts for evaluation.</p>
+          <form onSubmit={handleSubmit} className={styles.authForm}>
+            <div className={styles.inputGroup}>
+              <label htmlFor="email">Email Address</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.com"
+                className="form-input"
+                required
+              />
+            </div>
+            <div className={styles.inputGroup}>
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="form-input"
+                required
+                minLength={6}
+              />
+            </div>
+            <button
+              type="submit"
+              className={`btn-primary ${styles.authSubmit}`}
+              disabled={loading}
+            >
+              {loading
+                ? 'Please wait...'
+                : isLogin ? 'Sign In' : 'Create Account'}
+            </button>
+          </form>
+
+          <div className={styles.authToggle}>
+            <p>
+              {isLogin ? "Don't have an account?" : "Already have an account?"}
+              <button
+                type="button"
+                onClick={() => setIsLogin(!isLogin)}
+                className={styles.toggleBtn}
+              >
+                {isLogin ? 'Sign up' : 'Sign in'}
+              </button>
+            </p>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* Footer */}
       <footer className={styles.footer}>
-        <p>© 2026 HyperHire — Built with intelligence. Powered by AI.</p>
+        <p>© 2026 HyperEval — Built with intelligence. Powered by AI.</p>
       </footer>
     </div>
   );

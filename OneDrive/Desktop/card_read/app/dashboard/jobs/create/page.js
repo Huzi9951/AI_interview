@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useDashboard } from '@/context/DashboardContext';
 import styles from './create.module.css';
 
-const STEPS = ['Job Details', 'Job Description', 'Screening Criteria', 'Screening Form', 'AI Interview'];
+const STEPS = ['Job Details', 'Job Overview', 'Screening Criteria', 'AI Interview'];
 
 const defaultForm = {
     title: '',
@@ -218,7 +218,6 @@ export default function CreateJobPage() {
             case 1: return form.description.trim().length > 10;
             case 2: return true;
             case 3: return true;
-            case 4: return true;
             default: return false;
         }
     };
@@ -747,22 +746,9 @@ export default function CreateJobPage() {
                     </>
                 )}
 
-                {/* Step 4: Screening Form (placeholder - simple custom questions) */}
+
+                {/* Step 4: AI Interview */}
                 {currentStep === 3 && (
-                    <>
-                        <p className={styles.criteriaHint}>
-                            Set up screening questions that candidates will answer when applying. These help you quickly filter applicants.
-                        </p>
-
-                        <div className={styles.screeningInfo}>
-                            <div className={styles.screeningInfoIcon}>ℹ️</div>
-                            <span>You&apos;ll set up screening questions after creating the job. Questions can be customized per interview.</span>
-                        </div>
-                    </>
-                )}
-
-                {/* Step 5: AI Interview */}
-                {currentStep === 4 && (
                     <>
                         <div className={styles.aiStepGrid}>
                             {/* Left: Who should take */}

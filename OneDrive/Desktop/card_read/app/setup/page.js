@@ -25,7 +25,7 @@ export default function SetupPage() {
     // Auto-fill from invite link
     useEffect(() => {
         try {
-            const inviteRaw = sessionStorage.getItem('visionhire_invite');
+            const inviteRaw = sessionStorage.getItem('hypereval_invite');
             if (inviteRaw) {
                 const invite = JSON.parse(inviteRaw);
                 if (invite.fromInvite) {
@@ -33,7 +33,7 @@ export default function SetupPage() {
                     if (invite.jobDescription) setJd(invite.jobDescription);
                     if (invite.customQuestions?.length) setCustomQuestions(invite.customQuestions);
                 }
-                sessionStorage.removeItem('visionhire_invite');
+                sessionStorage.removeItem('hypereval_invite');
             }
         } catch (e) { /* ignore */ }
     }, []);
@@ -75,7 +75,7 @@ export default function SetupPage() {
                 questionCount,
                 customQuestions: customQuestions.filter(q => q.trim().length > 0),
             };
-            sessionStorage.setItem('visionhire_setup', JSON.stringify(interviewData));
+            sessionStorage.setItem('hypereval_setup', JSON.stringify(interviewData));
 
             router.push('/interview');
         } catch (err) {

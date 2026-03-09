@@ -27,7 +27,7 @@ export default function ThankYouPage() {
                 </div>
 
                 <p className={styles.footer}>
-                    Powered by <strong>HyperHire</strong> • AI-Driven Hiring Platform
+                    Powered by <strong>HyperEval</strong> • AI-Driven Hiring Platform
                 </p>
             </div>
         </div>

@@ -25,7 +25,7 @@ function Sidebar() {
             <div className={styles.sidebarHeader}>
                 <Link href="/dashboard" className={styles.sidebarLogo}>
                     <div className={styles.sidebarLogoIcon}>⚡</div>
-                    <span>Vision<span className={styles.sidebarLogoAccent}>Hire</span> AI</span>
+                    <span>Hyper<span className={styles.sidebarLogoAccent}>Eval</span></span>
                 </Link>
             </div>
 

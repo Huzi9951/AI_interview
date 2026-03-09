@@ -11,7 +11,7 @@ export default function ReportPage() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const data = sessionStorage.getItem('visionhire_report');
+        const data = sessionStorage.getItem('hypereval_report');
         if (!data) {
             router.push('/setup');
             return;
