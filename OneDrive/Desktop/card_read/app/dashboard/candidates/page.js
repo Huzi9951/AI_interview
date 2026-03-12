@@ -36,7 +36,7 @@ function parseContacts(text) {
 }
 
 export default function CandidatesPage() {
-    const { state, dispatch } = useDashboard();
+    const { state, dispatch, addCandidates, updateCandidate, assignToJob, updateMatchScore } = useDashboard();
     const fileInputRef = useRef(null);
     const [manualName, setManualName] = useState('');
     const [manualEmail, setManualEmail] = useState('');
@@ -52,6 +52,8 @@ export default function CandidatesPage() {
 
     // Multi-step invite modal
     const [showInvite, setShowInvite] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingCandidate, setEditingCandidate] = useState(null);
     const [inviteStep, setInviteStep] = useState(1); // 1=job, 2=expiry, 3=questions, 4=preview, 5=sending
     const [inviteJobId, setInviteJobId] = useState('');
     const [inviteExpiryHours, setInviteExpiryHours] = useState(48);
@@ -59,6 +61,10 @@ export default function CandidatesPage() {
     const [previewQuestions, setPreviewQuestions] = useState([]); // [{question, expectedAnswer, target_skill, source}]
     const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
     const [sendProgress, setSendProgress] = useState({ sent: 0, total: 0, done: false });
+    
+    // Selection Bar state
+    const [selectionJobId, setSelectionJobId] = useState('');
+    const [isMatching, setIsMatching] = useState(false);
 
     useEffect(() => {
         const fetchInterviews = async () => {
@@ -119,20 +125,21 @@ export default function CandidatesPage() {
                                 email: extracted.email,
                                 name: extracted.name || '',
                                 phone: extracted.phone || '',
-                                source: file.name
+                                source: file.name,
+                                resumeText: text // Store full text for AI matching
                             });
                         } else {
                             // Fallback to basic extraction if AI returns empty email
                             const contacts = parseContacts(text);
                             if (contacts.length > 0) {
-                                newCandidates.push({ ...contacts[0], source: file.name });
+                                newCandidates.push({ ...contacts[0], source: file.name, resumeText: text });
                             }
                         }
                     } catch (parseErr) {
                         // Fallback to basic extraction if AI fails
                         const contacts = parseContacts(text);
                         if (contacts.length > 0) {
-                            newCandidates.push({ ...contacts[0], source: file.name });
+                            newCandidates.push({ ...contacts[0], source: file.name, resumeText: text });
                         }
                     }
                 } catch (fileErr) {
@@ -143,7 +150,7 @@ export default function CandidatesPage() {
             if (newCandidates.length === 0) {
                 alert('No contact information could be extracted from the files.');
             } else {
-                dispatch({ type: 'ADD_CANDIDATES', payload: newCandidates });
+                await addCandidates(newCandidates);
                 showToast(`✓ ${newCandidates.length} candidate(s) imported successfully`);
             }
         } catch (err) {
@@ -153,10 +160,10 @@ export default function CandidatesPage() {
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    const handleAddManual = () => {
+    const handleAddManual = async () => {
         const email = manualEmail.trim();
         if (!email || !email.includes('@')) return;
-        dispatch({ type: 'ADD_CANDIDATES', payload: [{ email, name: manualName.trim(), phone: manualPhone.trim(), source: 'Manual' }] });
+        await addCandidates([{ email, name: manualName.trim(), phone: manualPhone.trim(), source: 'Manual' }]);
         setManualEmail(''); setManualName(''); setManualPhone('');
         showToast(`✓ Added ${manualName.trim() || email}`);
     };
@@ -207,8 +214,15 @@ export default function CandidatesPage() {
     const openInviteModal = () => {
         if (selectedIds.size === 0) return;
 
-        // Intercept duplicates
         const selectedCandidates = state.candidates.filter(c => selectedIds.has(c.id));
+        
+        // Find if all selected candidates have the same assigned job
+        const commonJobId = selectedCandidates.length > 0 
+            ? (selectedCandidates[0].jobAssignments?.[0]?.jobId || '')
+            : '';
+        const allSameJob = selectedCandidates.every(c => (c.jobAssignments?.[0]?.jobId || '') === commonJobId);
+
+        // Intercept duplicates
         const alreadyInvitedCount = selectedCandidates.filter(c =>
             (c.jobAssignments || []).some(a => a.status === 'invited' || a.status === 'interviewed' || a.status === 'completed')
         ).length;
@@ -219,12 +233,19 @@ export default function CandidatesPage() {
             }
         }
 
-        setInviteStep(1);
-        setInviteJobId('');
         setInviteExpiryHours(48);
         setInviteQuestions([{ question: '', expectedAnswer: '' }]);
         setPreviewQuestions([]);
         setSendProgress({ sent: 0, total: 0, done: false });
+        
+        if (allSameJob && commonJobId) {
+            setInviteJobId(commonJobId);
+            setInviteStep(2); // Skip job selection
+        } else {
+            setInviteJobId('');
+            setInviteStep(1);
+        }
+        
         setShowInvite(true);
     };
 
@@ -275,6 +296,27 @@ export default function CandidatesPage() {
         setIsGeneratingQuestions(false);
     };
 
+    const handleUpdateCandidate = async (e) => {
+        e.preventDefault();
+        if (!editingCandidate) return;
+        
+        const updates = {
+            name: editingCandidate.name,
+            email: editingCandidate.email,
+            phone: editingCandidate.phone
+        };
+
+        try {
+            await updateCandidate(editingCandidate.id, updates);
+            showToast('✓ Candidate details updated');
+            setShowEditModal(false);
+            setEditingCandidate(null);
+        } catch (err) {
+            console.error('Update failed:', err);
+            showToast('⚠ Failed to update candidate');
+        }
+    };
+
     // ── Reorder questions ──
     const moveQuestion = (idx, direction) => {
         const newQ = [...previewQuestions];
@@ -314,6 +356,7 @@ export default function CandidatesPage() {
                     jobTitle: job.title,
                     jobId: job.id,
                     jobDescription: job.description || '',
+                    companyName: state.user?.companyName || 'HyperEval',
                     expiryHours: inviteExpiryHours,
                     customQuestions: questionsPayload,
                     questionCount: previewQuestions.length,
@@ -354,6 +397,85 @@ export default function CandidatesPage() {
         if (sendProgress.done) setSelectedIds(new Set());
     };
 
+    const handleSelectionAssign = async () => {
+        if (!selectionJobId || selectedIds.size === 0) return;
+        const job = state.jobs.find(j => j.id === selectionJobId);
+        if (!job) return;
+
+        try {
+            await assignToJob(selectedIds, job.id, job.title);
+            showToast(`✓ ${selectedIds.size} candidates assigned to ${job.title}`);
+            setSelectedIds(new Set());
+            setSelectionJobId('');
+        } catch (err) {
+            console.error('Failed to assign selection:', err);
+            showToast('⚠ Failed to assign candidates');
+        }
+    };
+
+    const handleSelectionMatch = async () => {
+        if (!selectionJobId || selectedIds.size === 0) return;
+        const job = state.jobs.find(j => j.id === selectionJobId);
+        if (!job) return;
+
+        try {
+            // First, assign all selected candidates to this job (enforces single job rule)
+            await assignToJob(selectedIds, job.id, job.title);
+            
+            const { analyzeJDAndResume } = await import('@/lib/groqService');
+            const selectedCandidates = state.candidates.filter(c => selectedIds.has(c.id));
+            
+            for (const candidate of selectedCandidates) {
+                if (!candidate.resumeText) continue;
+                try {
+                    const result = await analyzeJDAndResume(job.description || job.title, candidate.resumeText);
+                    // Standardize on overall_match_score from AI results
+                    const score = result.overall_match_score ?? result.match_score ?? result.matchScore;
+                    if (score !== undefined) {
+                        await updateMatchScore(candidate.id, job.id, score);
+                    }
+                } catch (candidateErr) {
+                    console.error(`Match failed for ${candidate.email}:`, candidateErr);
+                }
+            }
+            showToast(`✓ AI Matching complete for selection`);
+        } catch (err) {
+            console.error('Selection match failed:', err);
+            showToast('⚠ AI Matching failed');
+        } finally {
+            setIsMatching(false);
+        }
+    };
+
+    const handleInlineAssign = async (candidateId, jobId) => {
+        if (!jobId) return;
+        const job = state.jobs.find(j => j.id === jobId);
+        if (!job) return;
+
+        try {
+            await assignToJob(new Set([candidateId]), job.id, job.title);
+            showToast(`✓ Candidate assigned to ${job.title}`);
+            
+            // Auto-trigger match if resume exists
+            const candidate = state.candidates.find(c => c.id === candidateId);
+            if (candidate && candidate.resumeText) {
+                try {
+                    const { analyzeJDAndResume } = await import('@/lib/groqService');
+                    const result = await analyzeJDAndResume(job.description || job.title, candidate.resumeText);
+                    const score = result.overall_match_score ?? result.match_score ?? result.matchScore;
+                    if (score !== undefined) {
+                        await updateMatchScore(candidateId, job.id, score);
+                    }
+                } catch (err) {
+                    console.error('Match failed:', err);
+                }
+            }
+        } catch (err) {
+            console.error('Failed to assign candidate:', err);
+            showToast('⚠ Failed to assign candidate');
+        }
+    };
+
     const openJobs = state.jobs.filter(j => j.status === 'open');
 
     // Get best status for display
@@ -376,6 +498,34 @@ export default function CandidatesPage() {
                     <span className={styles.headerCount}>{state.candidates.length} total candidates</span>
                 </div>
                 <div className={styles.headerActions}>
+                    {selectedIds.size > 0 && (
+                        <div className={styles.bulkActions}>
+                            <select 
+                                className={styles.toolbarJobSelect}
+                                value={selectionJobId}
+                                onChange={(e) => setSelectionJobId(e.target.value)}
+                            >
+                                <option value="">Assign to Job...</option>
+                                {openJobs.map(j => (
+                                    <option key={j.id} value={j.id}>{j.title}</option>
+                                ))}
+                            </select>
+                            <button 
+                                className={styles.bulkAssignBtn}
+                                disabled={!selectionJobId || isMatching}
+                                onClick={handleSelectionAssign}
+                            >
+                                Assign
+                            </button>
+                            <button 
+                                className={styles.bulkMatchBtn}
+                                disabled={!selectionJobId || isMatching}
+                                onClick={handleSelectionMatch}
+                            >
+                                🤖 Match
+                            </button>
+                        </div>
+                    )}
                     <button className={styles.inviteBtn} disabled={selectedIds.size === 0} onClick={openInviteModal}>
                         🚀 Invite ({selectedIds.size})
                     </button>
@@ -431,6 +581,7 @@ export default function CandidatesPage() {
                             <th>Applicant</th>
                             <th>Contact Info</th>
                             <th>Assigned Jobs</th>
+                            <th>Match Score</th>
                             <th>Source</th>
                             <th>Date Added</th>
                             <th>Actions</th>
@@ -466,51 +617,25 @@ export default function CandidatesPage() {
                                         </td>
                                         <td className={styles.tdJob}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                                <select
-                                                    className={styles.jobDropdown}
-                                                    value={(c.jobAssignments && c.jobAssignments.length > 0) ? c.jobAssignments[0].jobId : ''}
-                                                    onChange={e => {
-                                                        const newJobId = e.target.value;
-                                                        if (!newJobId) {
-                                                            // Provide a way to completely unassign (optional UX bonus)
-                                                            if (c.jobAssignments?.[0]) {
-                                                                dispatch({ type: 'UNASSIGN_FROM_JOB', payload: { candidateId: c.id, jobId: c.jobAssignments[0].jobId } });
-                                                            }
-                                                            return;
-                                                        }
-                                                        const newJob = state.jobs.find(j => j.id === newJobId);
-                                                        dispatch({
-                                                            type: 'CHANGE_CANDIDATE_JOB',
-                                                            payload: { candidateId: c.id, newJobId: newJob.id, newJobTitle: newJob.title }
-                                                        });
-                                                        showToast(`✓ Swapped assignment to ${newJob.title}`);
-                                                    }}
-                                                >
-                                                    <option value="">— Unassigned —</option>
-                                                    {state.jobs
-                                                        .filter(j => j.status === 'open' || (c.jobAssignments && c.jobAssignments.length > 0 && c.jobAssignments[0].jobId === j.id))
-                                                        .map(j => (
-                                                            <option key={j.id} value={j.id}>{j.title} {j.status === 'closed' ? '(Closed)' : ''}</option>
-                                                        ))}
-                                                </select>
+                                                {(() => {
+                                                    const ja = (c.jobAssignments || [])[0];
+                                                    if (!ja) return null;
 
-                                                {(c.jobAssignments || []).length > 0 && c.jobAssignments.map(a => {
-                                                    let displayHr = a.status;
-                                                    if (a.status === 'completed' || a.status === 'interviewed') displayHr = 'under review';
-
+                                                    let displayHr = ja.status;
+                                                    if (ja.status === 'completed' || ja.status === 'interviewed') displayHr = 'under review';
+                                                    
                                                     const interviewData = candidateInterviews[c.email];
                                                     const rec = interviewData?.hire_recommendation || '';
                                                     const isYes = rec.toLowerCase().includes('yes');
-                                                    const isNo = rec && !isYes;
 
                                                     return (
-                                                        <div key={a.jobId} className={styles.jobAssignmentBlock} style={{ marginTop: 4 }}>
-                                                            <span className={styles.jobChip}>
-                                                                Status:
+                                                        <div className={styles.jobAssignmentBlock}>
+                                                            <div className={styles.jobChip}>
+                                                                {ja.jobTitle}
                                                                 <span className={styles.chipStatus} style={{ marginLeft: 4 }}>
-                                                                    {displayHr}{a.score != null ? ` • ${a.score}/100` : ''}
+                                                                    {displayHr}{ja.matchScore != null ? ` • ${ja.matchScore}/100` : ''}
                                                                 </span>
-                                                            </span>
+                                                            </div>
                                                             {rec && (
                                                                 <div className={styles.aiRecBadge} data-rec={isYes ? 'yes' : 'no'}>
                                                                     AI: {isYes ? 'Yes' : 'No'}
@@ -518,8 +643,41 @@ export default function CandidatesPage() {
                                                             )}
                                                         </div>
                                                     );
-                                                })}
+                                                })()}
+                                                <select 
+                                                    className={styles.inlineJobSelect}
+                                                    value=""
+                                                    onChange={(e) => handleInlineAssign(c.id, e.target.value)}
+                                                >
+                                                    <option value="">+ {c.jobAssignments?.length > 0 ? 'Change Job' : 'Assign to Job'}</option>
+                                                    {openJobs.filter(j => !(c.jobAssignments || []).some(a => a.jobId === j.id)).map(j => (
+                                                        <option key={j.id} value={j.id}>{j.title}</option>
+                                                    ))}
+                                                </select>
+                                                {(!c.jobAssignments || c.jobAssignments.length === 0) && (
+                                                    <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>Unassigned</span>
+                                                )}
                                             </div>
+                                        </td>
+                                        <td>
+                                            {(() => {
+                                                const targetAssignment = (c.jobAssignments || [])[0];
+                                                
+                                                if (targetAssignment && targetAssignment.matchScore !== undefined && targetAssignment.matchScore !== null) {
+                                                    return (
+                                                        <div className={styles.matchScoreWrapper}>
+                                                            <div className={styles.matchScoreBar}>
+                                                                <div className={styles.matchScoreFill} style={{ 
+                                                                    width: `${targetAssignment.matchScore}%`,
+                                                                    backgroundColor: targetAssignment.matchScore > 75 ? '#22c55e' : targetAssignment.matchScore > 50 ? '#eab308' : '#ef4444'
+                                                                }} />
+                                                            </div>
+                                                            <span className={styles.matchScoreText}>{targetAssignment.matchScore}% Match {selectionJobId === targetAssignment.jobId ? '(Selected)' : ''}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                return <span className={styles.noResume}>{c.resumeText ? 'Pending Match...' : 'No Resume'}</span>;
+                                            })()}
                                         </td>
                                         <td className={styles.tdSource}>{c.source || '—'}</td>
                                         <td className={styles.tdDate}>{new Date(c.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</td>
@@ -528,6 +686,10 @@ export default function CandidatesPage() {
                                                 className={styles.analyticsBtn} title="View Interview Analytics">
                                                 📊 Analytics
                                             </Link>
+                                            <button className={styles.editActionBtn} onClick={() => {
+                                                setEditingCandidate({ ...c });
+                                                setShowEditModal(true);
+                                            }} title="Edit Candidate">✏️</button>
                                             <button className={styles.removeBtn} onClick={() => handleRemoveCandidate(c)} title="Remove">✕</button>
                                         </td>
                                     </tr>
@@ -555,7 +717,14 @@ export default function CandidatesPage() {
                                     {inviteStep === 5 && 'Sending Invites...'}
                                 </h2>
                                 <p className={styles.modalSubtitle}>
-                                    {inviteStep < 5 ? `${selectedIds.size} candidate(s) selected • Step ${inviteStep} of 4` : `${sendProgress.sent}/${sendProgress.total} sent`}
+                                    {inviteStep < 5 
+                                        ? `${selectedIds.size} candidate(s) selected • Step ${inviteStep} of 4` 
+                                        : `${sendProgress.sent}/${sendProgress.total} sent`}
+                                    {inviteJobId && inviteStep > 1 && inviteStep < 5 && (
+                                        <span style={{ marginLeft: 8, color: '#818cf8', fontWeight: 600 }}>
+                                            • For: {state.jobs.find(j => j.id === inviteJobId)?.title}
+                                        </span>
+                                    )}
                                 </p>
                             </div>
                             <button className={styles.modalClose} onClick={closeInviteModal}>×</button>
@@ -786,6 +955,59 @@ export default function CandidatesPage() {
             )}
 
             {toast && <div className={styles.toast}>{toast}</div>}
+
+            {/* Toast remains at the bottom */}
+            {/* ═══════════ Edit Candidate Modal ═══════════ */}
+            {showEditModal && editingCandidate && (
+                <div className={styles.modalOverlay} onClick={() => setShowEditModal(false)}>
+                    <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+                        <div className={styles.modalHeader}>
+                            <div>
+                                <h2 className={styles.modalTitle}>Edit Candidate</h2>
+                                <p className={styles.modalSubtitle}>Update profile details</p>
+                            </div>
+                            <button className={styles.modalClose} onClick={() => setShowEditModal(false)}>×</button>
+                        </div>
+                        <form onSubmit={handleUpdateCandidate}>
+                            <div className={styles.modalBody}>
+                                <div className={styles.modalFormContent}>
+                                    <div className={styles.modalField}>
+                                        <label className={styles.modalLabel}>Full Name</label>
+                                        <input 
+                                            className={styles.modalInput} 
+                                            value={editingCandidate.name} 
+                                            onChange={e => setEditingCandidate({ ...editingCandidate, name: e.target.value })} 
+                                            required 
+                                        />
+                                    </div>
+                                    <div className={styles.modalField}>
+                                        <label className={styles.modalLabel}>Email Address</label>
+                                        <input 
+                                            className={styles.modalInput} 
+                                            type="email"
+                                            value={editingCandidate.email} 
+                                            onChange={e => setEditingCandidate({ ...editingCandidate, email: e.target.value })} 
+                                            required 
+                                        />
+                                    </div>
+                                    <div className={styles.modalField}>
+                                        <label className={styles.modalLabel}>Phone Number</label>
+                                        <input 
+                                            className={styles.modalInput} 
+                                            value={editingCandidate.phone} 
+                                            onChange={e => setEditingCandidate({ ...editingCandidate, phone: e.target.value })} 
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className={styles.modalFooter}>
+                                <button type="button" className={styles.modalCancel} onClick={() => setShowEditModal(false)}>Cancel</button>
+                                <button type="submit" className={styles.modalSubmit}>Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

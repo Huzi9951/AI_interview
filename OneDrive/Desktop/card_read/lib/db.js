@@ -1,22 +1,22 @@
-import { supabase } from './supabaseClient';
+import { supabase, adminSupabase } from './supabaseClient';
 
 // =============================================
 // Interview CRUD
 // =============================================
 
 /** Create a new pending interview record */
-export async function createInterview({ candidateEmail, candidateName, jobTitle, jobId, tokenHash, customQuestions }) {
-    if (!supabase) return null;
-    const { data, error } = await supabase
+export async function createInterview({ candidateEmail, candidateName, jobTitle, jobId, tokenHash, customQuestions, resumeText, resumeMatchScore }) {
+    if (!adminSupabase) return null;
+    const { data, error } = await adminSupabase
         .from('interviews')
         .insert({
             candidate_email: candidateEmail,
-            candidate_name: candidateName || '',
-            job_title: jobTitle || '',
-            job_id: jobId || '',
-            token_hash: tokenHash || null,
+            candidate_name: candidateName,
+            job_title: jobTitle,
+            job_id: jobId,
+            token_hash: tokenHash,
             custom_questions: customQuestions || [],
-            status: 'pending',
+            status: 'pending'
         })
         .select()
         .single();
@@ -24,23 +24,33 @@ export async function createInterview({ candidateEmail, candidateName, jobTitle,
     return data;
 }
 
-/** Create multiple pending interview records at once */
-export async function createInterviewsBatch(interviewsArray) {
-    if (!supabase || !interviewsArray || interviewsArray.length === 0) return null;
-    const { data, error } = await supabase
+/** Create multiple "assigned" interviews at once */
+export async function createInterviewsBatch(interviews) {
+    if (!adminSupabase || !interviews || interviews.length === 0) return null;
+    const { data, error } = await adminSupabase
         .from('interviews')
-        .insert(interviewsArray.map(inv => ({
-            candidate_email: inv.candidateEmail,
-            candidate_name: inv.candidateName || '',
-            job_title: inv.jobTitle || '',
-            job_id: inv.jobId || '',
-            token_hash: inv.tokenHash || null,
-            custom_questions: inv.customQuestions || [],
-            status: 'pending',
-        })))
+        .upsert(interviews.map(i => ({
+            candidate_email: i.candidateEmail,
+            candidate_name: i.candidateName,
+            job_title: i.jobTitle,
+            job_id: i.jobId,
+            status: i.status || 'assigned'
+        })), { onConflict: 'candidate_email,job_id' })
         .select();
     if (error) { console.error('createInterviewsBatch error:', error); return null; }
     return data;
+}
+
+/** Unassign a candidate from a job by deleting the interview record */
+export async function unassignCandidateFromJob(email, jobId) {
+    if (!adminSupabase) return false;
+    const { error } = await adminSupabase
+        .from('interviews')
+        .delete()
+        .eq('candidate_email', email)
+        .eq('job_id', jobId);
+    if (error) { console.error('unassignCandidateFromJob error:', error); return false; }
+    return true;
 }
 
 /** Check if an interview already exists and is completed for this token */
@@ -67,6 +77,26 @@ export async function getInterviewByToken(tokenHash) {
         .limit(1)
         .single();
     if (error) { console.error('getInterviewByToken error:', error); return null; }
+    return data;
+}
+
+/** Update interview status and optionally other fields */
+export async function updateInterviewStatus(id, status, extra = {}) {
+    if (!adminSupabase) return null;
+    const updatePayload = { status, ...extra };
+    if (status === 'in_progress' && !updatePayload.started_at) {
+        updatePayload.started_at = new Date().toISOString();
+    } else if (status === 'completed' && !updatePayload.completed_at) {
+        updatePayload.completed_at = new Date().toISOString();
+    }
+
+    const { data, error } = await adminSupabase
+        .from('interviews')
+        .update(updatePayload)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) console.error('updateInterviewStatus error:', error);
     return data;
 }
 
@@ -120,8 +150,18 @@ export async function deleteInterview(id) {
 
 /** Completely wipe all candidate data including videos based on email */
 export async function deleteCandidateDataCompletely(email) {
-    if (!email) return false;
+    if (!adminSupabase) return false;
     try {
+        // Delete related interviews first
+        await adminSupabase.from('interviews').delete().eq('candidate_email', email);
+        // Then delete the candidate record
+        const { error: candidateError } = await adminSupabase.from('candidates').delete().eq('email', email);
+        if (candidateError) {
+            console.error('deleteCandidateDataCompletely error deleting candidate:', candidateError);
+            return false;
+        }
+
+        // Call API route to delete associated files (e.g., recordings)
         const res = await fetch('/api/delete-candidate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -129,12 +169,12 @@ export async function deleteCandidateDataCompletely(email) {
         });
         const data = await res.json();
         if (!res.ok) {
-            console.error('deleteCandidateDataCompletely error:', data.error);
+            console.error('deleteCandidateDataCompletely error from API:', data.error);
             return false;
         }
         return data.success;
     } catch (err) {
-        console.error('deleteCandidateDataCompletely error:', err);
+        console.error('deleteCandidateDataCompletely exception:', err);
         return false;
     }
 }
@@ -210,19 +250,8 @@ export async function uploadRecording(interviewId, blob) {
 }
 
 // =============================================
-// Query Helpers (Admin)
+// Query Helpers
 // =============================================
-
-/** Get all interviews (admin listing) */
-export async function getAllInterviews() {
-    if (!supabase) return [];
-    const { data, error } = await supabase
-        .from('interviews')
-        .select('*')
-        .order('created_at', { ascending: false });
-    if (error) { console.error('getAllInterviews error:', error); return []; }
-    return data || [];
-}
 
 /** Get interviews for a specific candidate email */
 export async function getInterviewsByEmail(email) {
@@ -248,15 +277,153 @@ export async function getInterviewById(id) {
     return data;
 }
 
-/** Get all completed interviews (for syncing dashboard status) */
-export async function getCompletedInterviews() {
+/** Get all interviews (for syncing dashboard status) */
+export async function fetchAllInterviewsFromDB() {
     if (!supabase) return [];
-    const { data, error } = await supabase
-        .from('interviews')
-        .select('id, candidate_email, candidate_name, job_title, job_id, overall_score, status, started_at, completed_at, recording_url')
-        .eq('status', 'completed')
-        .order('completed_at', { ascending: false });
-    if (error) { console.error('getCompletedInterviews error:', error); return []; }
-    return data || [];
+    try {
+        const { data, error } = await supabase
+            .from('interviews')
+            .select('id, candidate_email, candidate_name, job_title, job_id, overall_score, status, started_at, completed_at, recording_url, created_at')
+            .order('created_at', { ascending: false });
+        if (error) { console.error('fetchAllInterviewsFromDB error:', error); return []; }
+        return data || [];
+    } catch (err) {
+        console.error('fetchAllInterviewsFromDB exception:', err);
+        return [];
+    }
 }
 
+// =============================================
+// Candidates CRUD (Production)
+// =============================================
+
+export async function createCandidate(candidate) {
+    if (!adminSupabase) return null;
+    const { data, error } = await adminSupabase
+        .from('candidates')
+        .insert({
+            name: candidate.name || '',
+            email: candidate.email,
+            phone: candidate.phone || '',
+            designation: candidate.designation || '',
+            company: candidate.company || '',
+            resume_text: candidate.resumeText || '',
+            source: candidate.source || '',
+        })
+        .select()
+        .single();
+    if (error) { console.error('createCandidate error:', error); return null; }
+    return data;
+}
+
+export async function createCandidatesBatch(candidates) {
+    if (!adminSupabase || !candidates || candidates.length === 0) return null;
+    const { data, error } = await adminSupabase
+        .from('candidates')
+        .upsert(candidates.map(c => ({
+            name: c.name || '',
+            email: c.email,
+            phone: c.phone || '',
+            designation: c.designation || '',
+            company: c.company || '',
+            resume_text: c.resumeText || '',
+            source: c.source || '',
+        })), { onConflict: 'email' })
+        .select();
+    if (error) { console.error('createCandidatesBatch error:', JSON.stringify(error, null, 2)); return null; }
+    return data;
+}
+
+export async function getAllCandidates() {
+    if (!supabase) return [];
+    try {
+        const { data, error } = await supabase.from('candidates').select('*').order('added_at', { ascending: false });
+        if (error) { console.error('getAllCandidates error:', error); return []; }
+        return data || [];
+    } catch (err) {
+        console.error('getAllCandidates exception:', err);
+        return [];
+    }
+}
+
+export async function updateCandidate(id, updates) {
+    if (!adminSupabase) return null;
+    const { data, error } = await adminSupabase
+        .from('candidates')
+        .update({
+            name: updates.name,
+            email: updates.email,
+            phone: updates.phone,
+            designation: updates.designation,
+            company: updates.company,
+            resume_text: updates.resumeText,
+            source: updates.source,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) { console.error('updateCandidate error:', error); return null; }
+    return data;
+}
+
+// =============================================
+// Jobs CRUD (Production)
+// =============================================
+
+export async function createJob(job) {
+    if (!adminSupabase) return null;
+    const { data, error } = await adminSupabase
+        .from('jobs')
+        .insert({
+            title: job.title,
+            description: job.description || '',
+            skills: job.skills || [],
+            status: job.status || 'open',
+            location_type: job.locationType || '',
+            location: job.location || '',
+            experience_level: job.experienceLevel || '',
+            experience_range: job.experienceRange || '',
+            employment_type: job.employmentType || '',
+            department: job.department || '',
+            must_have: job.mustHave || [],
+            preferred: job.preferred || [],
+            salary_min: job.salaryMin || null,
+            salary_max: job.salaryMax || null,
+            currency: job.currency || 'USD',
+        })
+        .select()
+        .single();
+    if (error) { console.error('createJob error:', error); return null; }
+    return data;
+}
+
+export async function getAllJobs() {
+    if (!supabase) return [];
+    try {
+        const { data, error } = await supabase.from('jobs').select('*').order('created_at', { ascending: false });
+        if (error) { console.error('getAllJobs error:', error); return []; }
+        return data || [];
+    } catch (err) {
+        console.error('getAllJobs exception:', err);
+        return [];
+    }
+}
+
+export async function updateJob(id, updates) {
+    if (!supabase || !id) return null;
+    const { data, error } = await supabase
+        .from('jobs')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) { console.error('updateJob error:', error); return null; }
+    return data;
+}
+
+export async function deleteJob(id) {
+    if (!supabase || !id) return false;
+    const { error } = await supabase.from('jobs').delete().eq('id', id);
+    if (error) { console.error('deleteJob error:', error); return false; }
+    return true;
+}

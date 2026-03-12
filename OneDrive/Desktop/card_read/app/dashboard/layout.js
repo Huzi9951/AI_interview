@@ -9,11 +9,16 @@ const navItems = [
     { href: '/dashboard', icon: '📊', label: 'Dashboard' },
     { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
     { href: '/dashboard/candidates', icon: '👥', label: 'Candidates' },
+    { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
     { href: '/setup', icon: '🤖', label: 'AI Interviews', external: true },
 ];
 
+import { useDashboard } from '@/context/DashboardContext';
+
 function Sidebar() {
     const pathname = usePathname();
+    const { state } = useDashboard();
+    const user = state.user || {};
 
     const isActive = (href) => {
         if (href === '/dashboard') return pathname === '/dashboard';
@@ -25,7 +30,7 @@ function Sidebar() {
             <div className={styles.sidebarHeader}>
                 <Link href="/dashboard" className={styles.sidebarLogo}>
                     <div className={styles.sidebarLogoIcon}>⚡</div>
-                    <span>Hyper<span className={styles.sidebarLogoAccent}>Eval</span></span>
+                    <span>{user.companyName || 'Hyper'}<span className={styles.sidebarLogoAccent}>{user.companyName ? '' : 'Eval'}</span></span>
                 </Link>
             </div>
 
@@ -51,10 +56,10 @@ function Sidebar() {
 
             <div className={styles.sidebarFooter}>
                 <div className={styles.userInfo}>
-                    <div className={styles.userAvatar}>HR</div>
-                    <div>
-                        <div className={styles.userName}>HR Admin</div>
-                        <div className={styles.userRole}>Administrator</div>
+                    <div className={styles.userAvatar}>{user.name?.charAt(0) || 'HR'}</div>
+                    <div className={styles.userText}>
+                        <div className={styles.userName}>{user.name || 'HR Admin'}</div>
+                        <div className={styles.userRole}>{user.designation || 'Administrator'}</div>
                     </div>
                 </div>
             </div>

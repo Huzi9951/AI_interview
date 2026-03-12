@@ -204,18 +204,15 @@ export async function generateQuestion(context) {
         {
             role: 'system',
             content: `You are a professional technical interviewer conducting a focused interview. Generate the next interview question.
-
+            
 Rules:
 - This is question ${questionNumber} of a maximum ${maxQuestions} question interview.
+- CRITICAL: Generate the question based STRICTLY on the Job Description (JD) provided. Ignore the candidate's personal background, specific projects not in the JD, or strengths/weaknesses from their resume.
+- Focus on the skills and requirements listed in the JD.
 - The candidate will be answering verbally in a live audio interview. Ensure the question is conversational, clear, and natural to speak.
-- Keep questions concise and clear (1-3 sentences max).
-- Questions should feel conversational and natural, as if a real interviewer is asking.
-- Adapt based on previous answers:
+- Adapt BASED ONLY on previous answers in this interview session:
   * Weak answer → probe deeper on that topic
-  * Strong answer → increase difficulty
-  * Skill gap found → target that gap
-- For question 1: Start with a question about the candidate's strongest matching skill.
-- For later questions: Use evaluation data to adapt.
+  * Strong answer → increase difficulty within the scope of the JD
 - NEVER repeat a question that was already asked.
 - If the previous answer was vague or incomplete, you may set "is_follow_up" to true to ask a probing follow-up. Follow-ups do NOT count toward the question total.
 
@@ -223,7 +220,7 @@ Return JSON: { "question": "your question text here", "target_skill": "skill bei
         },
         {
             role: 'user',
-            content: `SKILL ANALYSIS:\n${JSON.stringify(skillAnalysis, null, 2)}${customQuestions.length > 0 ? `\n\nCUSTOM QUESTIONS ALREADY ASKED (do NOT repeat these):\n${customQuestions.map((q, i) => `- ${q}`).join('\n')}` : ''}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nINTERVIEW HISTORY:${historyText || '\nNo questions asked yet - this is the first question.'}`
+            content: `JOB DESCRIPTION:\n${jobDescription}\n\nINTERVIEW HISTORY:${historyText || '\nNo questions asked yet - this is the first question.'}`
         }
     ];
     return await chatCompletion(messages, 0.7);

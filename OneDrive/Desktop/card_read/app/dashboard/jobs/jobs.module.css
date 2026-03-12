@@ -1067,3 +1067,36 @@
         grid-template-columns: 1fr;
     }
 }
+
+.matchScoreWrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 100px;
+}
+
+.matchScoreBar {
+    width: 100%;
+    height: 6px;
+    background: #e8e8ef;
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.matchScoreFill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.matchScoreText {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #4b5563;
+}
+
+.noResume {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    font-style: italic;
+}

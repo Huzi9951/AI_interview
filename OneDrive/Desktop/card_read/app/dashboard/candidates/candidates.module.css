@@ -33,7 +33,67 @@
 
 .headerActions {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
+}
+
+.bulkActions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(26, 26, 46, 0.03);
+    border: 1px solid #e8e8ef;
+    border-radius: 12px;
+    margin-right: 8px;
+}
+
+.toolbarJobSelect {
+    background: #fff;
+    border: 1px solid #e8e8ef;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: #1a1a2e;
+    outline: none;
+    min-width: 160px;
+    font-family: inherit;
+}
+
+.toolbarJobSelect:focus {
+    border-color: #e8604c;
+}
+
+.bulkAssignBtn {
+    padding: 6px 14px;
+    background: #1a1a2e;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.bulkAssignBtn:hover:not(:disabled) {
+    background: #334155;
+}
+
+.bulkMatchBtn {
+    padding: 6px 14px;
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366f1;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bulkMatchBtn:hover:not(:disabled) {
+    background: rgba(99, 102, 241, 0.15);
 }
 
 .inviteBtn {
@@ -85,6 +145,27 @@
 
 .fileInput {
     display: none;
+}
+
+.inlineJobSelect {
+    appearance: none;
+    background: transparent;
+    border: 1px dashed #e8e8ef;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #9ca3af;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+    width: fit-content;
+}
+
+.inlineJobSelect:hover {
+    border-color: #e8604c;
+    color: #e8604c;
+    background: #fef2f0;
 }
 
 /* Toolbar */
@@ -711,15 +792,98 @@
     transition: all 0.2s ease;
 }
 
-.filterDropdown:hover {
-    border-color: #cbd5e1;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+.filterDropdown:focus {
+    border-color: #6366f1;
+    background-color: #f8fafc;
 }
 
-.filterDropdown:focus {
+.editActionBtn {
+    padding: 6px 10px;
+    border: 1px solid #e8e8ef;
+    background: #fff;
+    color: #4b5563;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: all 0.2s;
+}
+
+.editActionBtn:hover {
+    border-color: #6366f1;
+    color: #6366f1;
+    background: #f5f3ff;
+}
+
+.modalFormContent {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.modalField {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.modalLabel {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.modalInput {
+    padding: 10px 14px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #f8fafc;
+    font-size: 0.9rem;
     outline: none;
+    transition: all 0.2s;
+}
+
+.modalInput:focus {
     border-color: #e8604c;
-    box-shadow: 0 0 0 3px rgba(232, 96, 76, 0.15);
+    box-shadow: 0 0 0 3px rgba(232, 96, 76, 0.1);
+}
+
+.modalFooter {
+    padding: 16px 24px;
+    border-top: 1px solid #334155;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.modalCancel {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid #475569;
+    color: #94a3b8;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.modalSubmit {
+    padding: 8px 20px;
+    background: #e8604c;
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.modalSubmit:hover {
+    background: #d4543f;
 }
 
 .sendingDone {
@@ -815,4 +979,139 @@
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+.matchScoreWrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 100px;
+}
+
+.matchScoreBar {
+    width: 100%;
+    height: 6px;
+    background: #e8e8ef;
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.matchScoreFill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.matchScoreText {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #4b5563;
+}
+
+.noResume {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    font-style: italic;
+}
+
+/* Selection Bar */
+.selectionBar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    border: 1px solid #334155;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    border-radius: 16px;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    z-index: 900;
+    animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUp {
+    from { transform: translate(-50%, 40px); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.selectionInfo {
+    font-size: 0.9rem;
+    color: #e2e8f0;
+}
+
+.selectionInfo strong {
+    color: #e8604c;
+    font-size: 1.1rem;
+    margin-right: 4px;
+}
+
+.selectionActions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.jobSelect {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    outline: none;
+    min-width: 200px;
+    font-family: inherit;
+}
+
+.jobSelect:focus {
+    border-color: #e8604c;
+}
+
+.assignSelectionBtn {
+    padding: 8px 20px;
+    background: #e8604c;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.assignSelectionBtn:hover:not(:disabled) {
+    background: #d4543f;
+    transform: translateY(-1px);
+}
+
+.assignSelectionBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.matchSelectionBtn {
+    padding: 8px 20px;
+    background: rgba(99, 102, 241, 0.2);
+    color: #818cf8;
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.matchSelectionBtn:hover:not(:disabled) {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: #818cf8;
+}
+
+.matchSelectionBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }

@@ -3,7 +3,9 @@ import nodemailer from 'nodemailer';
 export async function POST(request) {
     try {
         const body = await request.json();
-        const { candidates, jobTitle, jobId, jobDescription, expiryHours, customQuestions, questionCount } = body;
+        const { candidates, jobTitle, jobId, jobDescription, companyName, expiryHours, customQuestions, questionCount } = body;
+
+        const effectiveCompanyName = companyName || 'HyperEval';
 
         if (!candidates || !candidates.length || !jobTitle) {
             return Response.json({ error: 'Missing required fields' }, { status: 400 });
@@ -12,7 +14,7 @@ export async function POST(request) {
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: Number(process.env.SMTP_PORT),
-            secure: false,
+            secure: process.env.SMTP_SECURE === 'true',
             pool: true, // Use connection pooling for high-volume sending
             maxConnections: 10,
             maxMessages: 100,
@@ -56,15 +58,17 @@ export async function POST(request) {
                         jobId: jobId || '',
                         tokenHash,
                         customQuestions: customQuestions || [],
+                        resumeText: candidate.resumeText || '',
+                        resumeMatchScore: candidate.matchScore || 0,
                     });
 
                     const html = `
                     <!DOCTYPE html>
                     <html>
                     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; background: #f5f5f5;">
-                        <div style="background: linear-gradient(135deg, #e8604c, #d4543f); padding: 32px 24px; text-align: center;">
-                            <h1 style="color: #fff; margin: 0; font-size: 24px;">HyperEval</h1>
-                            <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px;">AI-Powered Interview Platform</p>
+                        <div style="background: #ffffff; padding: 32px 24px; text-align: center; border-bottom: 1px solid #eee;">
+                            <h1 style="color: #e8604c; margin: 0; font-size: 24px;">${effectiveCompanyName}</h1>
+                            <p style="color: #000000; margin: 8px 0 0; font-size: 14px; font-weight: 500;">AI-Powered Interview Platform</p>
                         </div>
                         <div style="background: #fff; padding: 32px 24px;">
                             <p style="font-size: 16px; color: #1a1a2e;">Hi ${candidate.name || 'there'},</p>
@@ -95,16 +99,16 @@ export async function POST(request) {
                         </div>
                         <div style="background: #f8f9fa; padding: 20px 24px; text-align: center;">
                             <p style="font-size: 12px; color: #9ca3af; margin: 0;">
-                                Powered by HyperEval • AI-Driven Hiring Platform
+                                Powered by ${effectiveCompanyName} • AI-Driven Hiring Platform
                             </p>
                         </div>
                     </body>
                     </html>`;
 
                     await transporter.sendMail({
-                        from: `"HyperEval" <${process.env.SMTP_EMAIL}>`,
+                        from: `"${effectiveCompanyName}" <${process.env.SMTP_EMAIL}>`,
                         to: candidate.email,
-                        subject: `Interview Invitation: ${jobTitle} — HyperEval`,
+                        subject: `Interview Invitation: ${jobTitle} — ${effectiveCompanyName}`,
                         html,
                     });
 

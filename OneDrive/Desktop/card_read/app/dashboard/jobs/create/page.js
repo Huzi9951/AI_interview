@@ -37,7 +37,7 @@ const defaultForm = {
 
 export default function CreateJobPage() {
     const router = useRouter();
-    const { dispatch } = useDashboard();
+    const { addJob } = useDashboard();
     const fileInputRef = useRef(null);
 
     const [phase, setPhase] = useState('method'); // method | paste | upload | form | success
@@ -200,7 +200,7 @@ export default function CreateJobPage() {
         updateForm('preferred', form.preferred.filter((_, i) => i !== index));
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         const experienceRange = `${form.experienceMin}-${form.experienceMax} years`;
         const jobData = {
             ...form,
@@ -208,7 +208,7 @@ export default function CreateJobPage() {
             salaryMin: form.salaryMin ? Number(form.salaryMin) : null,
             salaryMax: form.salaryMax ? Number(form.salaryMax) : null,
         };
-        dispatch({ type: 'ADD_JOB', payload: jobData });
+        await addJob(jobData);
         setPhase('success');
     };
 

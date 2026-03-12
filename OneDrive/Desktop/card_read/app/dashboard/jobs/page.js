@@ -6,7 +6,7 @@ import { useDashboard } from '@/context/DashboardContext';
 import styles from './jobs.module.css';
 
 export default function JobsPage() {
-    const { state, dispatch } = useDashboard();
+    const { state, dispatch, unassignFromJob, assignToJob, updateMatchScore } = useDashboard();
     const [selectedJob, setSelectedJob] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('details'); // details | candidates
@@ -50,29 +50,48 @@ export default function JobsPage() {
             (c.jobAssignments || []).some(a => a.jobId === jobId)
         ).map(c => {
             const assignment = c.jobAssignments.find(a => a.jobId === jobId);
-            return { ...c, jobStatus: assignment?.status || 'assigned', jobScore: assignment?.score };
+            return {
+                ...c,
+                jobStatus: assignment?.status || 'assigned',
+                jobScore: assignment?.score,
+                matchScore: assignment?.matchScore // AI Resume Match Score
+            };
         });
     };
 
-    const getUnassignedCandidates = (jobId) => {
+    const getUnassignedCandidates = () => {
         return state.candidates.filter(c =>
-            !(c.jobAssignments || []).some(a => a.jobId === jobId)
+            !c.jobAssignments || c.jobAssignments.length === 0
         );
     };
 
-    const handleAssign = () => {
+    const handleAssign = async () => {
         if (assignSelection.size === 0 || !selectedJob) return;
-        dispatch({
-            type: 'ASSIGN_TO_JOB',
-            payload: {
-                candidateIds: Array.from(assignSelection),
-                jobId: selectedJob.id,
-                jobTitle: selectedJob.title,
-            },
-        });
-        showToast(`✓ Assigned ${assignSelection.size} candidate(s) to ${selectedJob.title}`);
+
+        const candidateIds = Array.from(assignSelection);
+        await assignToJob(assignSelection, selectedJob.id, selectedJob.title);
+
+        showToast(`✓ Assigned ${candidateIds.length} candidate(s) to ${selectedJob.title}`);
         setShowAssignModal(false);
         setAssignSelection(new Set());
+
+        // Trigger AI Resume Matching
+        const { analyzeJDAndResume } = await import('@/lib/groqService');
+        const jd = `${selectedJob.title}\n${selectedJob.description}\n${(selectedJob.skills || []).join(', ')}`;
+
+        candidateIds.forEach(async (id) => {
+            const candidate = state.candidates.find(c => c.id === id);
+            if (candidate && candidate.resumeText) {
+                try {
+                    const result = await analyzeJDAndResume(jd, candidate.resumeText);
+                    if (result && result.overall_match_score !== undefined) {
+                        await updateMatchScore(id, selectedJob.id, result.overall_match_score);
+                    }
+                } catch (err) {
+                    console.error(`Match analysis failed for ${candidate.email}:`, err);
+                }
+            }
+        });
     };
 
     // ── Open single invite modal (with question preview) ──
@@ -149,7 +168,12 @@ export default function JobsPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    candidates: [{ email: inviteCandidate.email, name: inviteCandidate.name }],
+                    candidates: [{ 
+                        email: inviteCandidate.email, 
+                        name: inviteCandidate.name,
+                        resumeText: inviteCandidate.resumeText || '',
+                        matchScore: inviteCandidate.matchScore || 0,
+                    }],
                     jobTitle: selectedJob.title,
                     jobId: selectedJob.id,
                     jobDescription: selectedJob.description || '',
@@ -359,6 +383,7 @@ export default function JobsPage() {
                                                     <tr>
                                                         <th>Candidate</th>
                                                         <th>Contact</th>
+                                                        <th>Match Score</th>
                                                         <th>Status</th>
                                                         <th>Actions</th>
                                                     </tr>
@@ -374,36 +399,64 @@ export default function JobsPage() {
                                                                 <div className={styles.cEmail}>{c.email}</div>
                                                                 {c.phone && <div className={styles.cPhone}>{c.phone}</div>}
                                                             </td>
+                                                            <td>
+                                                                {c.matchScore !== undefined && c.matchScore !== null ? (
+                                                                    <div className={styles.matchScoreWrapper}>
+                                                                        <div className={styles.matchScoreBar}>
+                                                                            <div className={styles.matchScoreFill} style={{
+                                                                                width: `${c.matchScore}%`,
+                                                                                backgroundColor: c.matchScore > 75 ? '#22c55e' : c.matchScore > 50 ? '#eab308' : '#ef4444'
+                                                                            }} />
+                                                                        </div>
+                                                                        <span className={styles.matchScoreText}>{c.matchScore}% Match</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className={styles.noResume}>No Resume</span>
+                                                                )}
+                                                            </td>
                                                             <td>{statusBadge(c.jobStatus, c.jobScore)}</td>
                                                             <td>
-                                                                <div className={styles.cActions}>
-                                                                    {(c.jobStatus === 'assigned') && (
-                                                                        <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
-                                                                            📧 Send Invite
-                                                                        </button>
-                                                                    )}
-                                                                    {c.jobStatus === 'invited' && (
-                                                                        <>
-                                                                            <span className={styles.actionWaiting} style={{ marginRight: 8 }}>⏳ Awaiting</span>
+                                                                    <div className={styles.cActions}>
+                                                                        {(c.jobStatus === 'assigned') && (
                                                                             <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
-                                                                                📧 Resend Invite
+                                                                                📧 Send Invite
                                                                             </button>
-                                                                        </>
-                                                                    )}
-                                                                    {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed') && (
-                                                                        <>
-                                                                            <button className={styles.actionAccept} onClick={() => handleStatusUpdate(c.id, 'accepted')}>✅ Accept</button>
-                                                                            <button className={styles.actionReject} onClick={() => handleStatusUpdate(c.id, 'rejected')}>❌ Reject</button>
-                                                                        </>
-                                                                    )}
-                                                                    {(c.jobStatus === 'accepted' || c.jobStatus === 'rejected') && null}
-                                                                    {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed' || c.jobStatus === 'accepted' || c.jobStatus === 'rejected') && (
-                                                                        <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`}
-                                                                            className={styles.actionAnalytics}>
-                                                                            📊 Analytics
-                                                                        </Link>
-                                                                    )}
-                                                                </div>
+                                                                        )}
+                                                                        {c.jobStatus === 'invited' && (
+                                                                            <>
+                                                                                <span className={styles.actionWaiting} style={{ marginRight: 8 }}>⏳ Awaiting</span>
+                                                                                <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
+                                                                                    📧 Resend Invite
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                        {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed') && (
+                                                                            <>
+                                                                                <button className={styles.actionAccept} onClick={() => handleStatusUpdate(c.id, 'accepted')}>✅ Accept</button>
+                                                                                <button className={styles.actionReject} onClick={() => handleStatusUpdate(c.id, 'rejected')}>❌ Reject</button>
+                                                                            </>
+                                                                        )}
+                                                                        {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed' || c.jobStatus === 'accepted' || c.jobStatus === 'rejected') && (
+                                                                            <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`}
+                                                                                className={styles.actionAnalytics}>
+                                                                                📊 Analytics
+                                                                            </Link>
+                                                                        )}
+                                                                        
+                                                                        {/* Unassign button */}
+                                                                        <button 
+                                                                            className={styles.actionUnassign} 
+                                                                            onClick={() => {
+                                                                                if (confirm(`Are you sure you want to unassign ${c.name || c.email} from this job?`)) {
+                                                                                    unassignFromJob(c.id, selectedJob.id);
+                                                                                    showToast(`✓ Candidate unassigned`);
+                                                                                }
+                                                                            }}
+                                                                            title="Unassign from this job"
+                                                                        >
+                                                                            🚫 Unassign
+                                                                        </button>
+                                                                    </div>
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -437,7 +490,7 @@ export default function JobsPage() {
                             <button className={styles.modalClose} onClick={() => setShowAssignModal(false)}>×</button>
                         </div>
                         <div className={styles.modalBody}>
-                            {getUnassignedCandidates(selectedJob.id).length === 0 ? (
+                            {getUnassignedCandidates().length === 0 ? (
                                 <div className={styles.modalEmpty}>
                                     <p>No unassigned candidates. Add candidates from the <Link href="/dashboard/candidates" style={{ color: '#e8604c', fontWeight: 600 }}>Candidates page</Link> first.</p>
                                 </div>
@@ -446,17 +499,17 @@ export default function JobsPage() {
                                     <div className={styles.modalSelectAll}>
                                         <label className={styles.modalCheckLabel}>
                                             <input type="checkbox" className={styles.modalCheckbox}
-                                                checked={assignSelection.size === getUnassignedCandidates(selectedJob.id).length && assignSelection.size > 0}
+                                                checked={assignSelection.size === getUnassignedCandidates().length && assignSelection.size > 0}
                                                 onChange={() => {
-                                                    const all = getUnassignedCandidates(selectedJob.id).map(c => c.id);
+                                                    const all = getUnassignedCandidates().map(c => c.id);
                                                     setAssignSelection(assignSelection.size === all.length ? new Set() : new Set(all));
                                                 }} />
-                                            Select All ({getUnassignedCandidates(selectedJob.id).length})
+                                            Select All ({getUnassignedCandidates().length})
                                         </label>
                                         <span className={styles.modalSelectedCount}>{assignSelection.size} selected</span>
                                     </div>
                                     <div className={styles.modalCandidateList}>
-                                        {getUnassignedCandidates(selectedJob.id).map(c => (
+                                        {getUnassignedCandidates().map(c => (
                                             <label key={c.id} className={styles.modalCandidateRow}>
                                                 <input type="checkbox" className={styles.modalCheckbox}
                                                     checked={assignSelection.has(c.id)}
