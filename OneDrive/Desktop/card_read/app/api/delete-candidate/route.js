@@ -57,14 +57,26 @@ export async function POST(request) {
             }
         }
 
-        // 3. Delete from DB
-        const { error: deleteError } = await supabase
+        // 3. Delete from DB (Interviews)
+        const { error: interviewDeleteError } = await supabase
             .from('interviews')
             .delete()
             .eq('candidate_email', email);
 
-        if (deleteError) {
-            return Response.json({ error: deleteError.message }, { status: 500 });
+        if (interviewDeleteError) {
+            console.error('Interview delete error:', interviewDeleteError);
+            return Response.json({ error: interviewDeleteError.message }, { status: 500 });
+        }
+
+        // 4. Delete candidate record
+        const { error: candidateDeleteError } = await supabase
+            .from('candidates')
+            .delete()
+            .eq('email', email);
+
+        if (candidateDeleteError) {
+            console.error('Candidate delete error:', candidateDeleteError);
+            return Response.json({ error: candidateDeleteError.message }, { status: 500 });
         }
 
         return Response.json({ success: true, deletedInterviewsCount: interviews?.length || 0, deletedFilesCount: filesToDelete.length });

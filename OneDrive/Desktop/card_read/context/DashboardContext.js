@@ -136,15 +136,17 @@ const initialState = {
     jobs: [],
     candidates: [],
     user: {
-        name: 'Afifa Khatoon',
-        email: 'afifa.k@hyperthinksys.com',
-        designation: 'HR Manager',
-        companyName: 'HyperEval',
+        name: '',
+        email: '',
+        designation: '',
+        companyName: '',
         phone: '',
-        role: 'ADMIN'
+        role: 'ADMIN',
+        assigned_jobs: []
     },
     loading: true,
 };
+
 
 function dashboardReducer(state, action) {
     switch (action.type) {
@@ -200,23 +202,36 @@ function dashboardReducer(state, action) {
         }
 
         case 'ADD_CANDIDATES': {
-            const existing = new Set(state.candidates.map(c => c.email));
-            const newCandidates = action.payload
-                .filter(c => !existing.has(c.email))
-                .map(c => ({
+            const incoming = action.payload || [];
+            if (incoming.length === 0) return state;
+
+            const incomingEmails = new Set(incoming.map(c => c.email));
+            
+            // Remove existing candidates whose emails match the incoming ones
+            // (They will be re-added at the top)
+            const remainingCandidates = state.candidates.filter(c => !incomingEmails.has(c.email));
+
+            const newCandidates = incoming.map(c => {
+                // Find if candidate already existed in local state to preserve some metadata if needed
+                const existing = state.candidates.find(ec => ec.email === c.email);
+                
+                return {
                     ...c,
-                    name: c.name || '',
-                    phone: c.phone || '',
-                    designation: c.designation || '',
-                    company: c.company || '',
-                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-                    addedAt: new Date().toISOString(),
-                    invited: false,
-                    invitedFor: null,
-                    interviewStatus: 'pending',
-                    resumeText: c.resumeText || '', // Persistent resume text
-                }));
-            return { ...state, candidates: [...newCandidates, ...state.candidates] };
+                    name: c.name || (existing?.name) || '',
+                    phone: c.phone || (existing?.phone) || '',
+                    designation: c.designation || (existing?.designation) || '',
+                    company: c.company || (existing?.company) || '',
+                    id: existing?.id || (Date.now().toString() + Math.random().toString(36).substr(2, 9)),
+                    addedAt: existing?.addedAt || new Date().toISOString(),
+                    invited: existing?.invited || false,
+                    invitedFor: existing?.invitedFor || null,
+                    interviewStatus: existing?.interviewStatus || 'pending',
+                    resumeText: c.resumeText || (existing?.resumeText) || '',
+                    jobAssignments: existing?.jobAssignments || []
+                };
+            });
+
+            return { ...state, candidates: [...newCandidates, ...remainingCandidates] };
         }
 
         case 'INVITE_CANDIDATES': {
@@ -259,11 +274,11 @@ function dashboardReducer(state, action) {
         }
 
         case 'UPDATE_CANDIDATE_MATCH_SCORE': {
-            const { candidateId, jobId, matchScore } = action.payload;
+            const { candidateId, jobId, matchScore, analysis } = action.payload;
             const candidates = state.candidates.map(c => {
                 if (c.id !== candidateId) return c;
                 const assignments = (c.jobAssignments || []).map(a =>
-                    a.jobId === jobId ? { ...a, matchScore } : a
+                    a.jobId === jobId ? { ...a, matchScore, analysis: analysis || a.analysis } : a
                 );
                 return { ...c, jobAssignments: assignments };
             });
@@ -351,24 +366,33 @@ export function DashboardProvider({ children }) {
     // Initial Load: Priority to localStorage, fallback to Supabase sync
     useEffect(() => {
         async function initDashboard() {
-            dispatch({ type: 'SET_LOADING', payload: true }); // Set loading true at start
-
-            // Load user from local storage first
-            if (typeof window !== 'undefined') {
-                const savedUser = localStorage.getItem(USER_STORAGE_KEY);
-                if (savedUser) {
-                    dispatch({ type: 'UPDATE_USER', payload: JSON.parse(savedUser) });
+            dispatch({ type: 'SET_LOADING', payload: true });
+            // 0. Fetch User Role & Assigned Jobs from Supabase
+            let currentUser = state.user;
+            try {
+                const { supabase: client } = await import('@/lib/supabaseClient');
+                if (client) {
+                    const { data: { user } } = await client.auth.getUser();
+                    if (user) {
+                        currentUser = {
+                            ...currentUser,
+                            email: user.email,
+                            role: user.user_metadata?.role || 'ADMIN',
+                            assigned_jobs: user.user_metadata?.assigned_jobs || [],
+                            companyName: user.user_metadata?.company_name || currentUser.companyName,
+                            name: user.user_metadata?.full_name || user.user_metadata?.name || currentUser.name
+                        };
+                        dispatch({ type: 'UPDATE_USER', payload: currentUser });
+                    }
                 }
+            } catch (authErr) {
+                console.warn('Auth check failed:', authErr);
             }
 
             // 1. Try LocalStorage for dashboard data
             const localData = getInitialState();
-            if (localData && (localData.jobs.length > 5 || localData.candidates.length > 0)) {
-                dispatch({ type: 'INIT', payload: { ...localData, user: state.user } }); // Preserve user from local storage
-                console.log('Dashboard initialized from localStorage');
-            }
-
-            // 2. Try Supabase sync as secondary/background
+            
+            // 2. Try Supabase sync
             try {
                 const { getAllCandidates, getAllJobs, fetchAllInterviewsFromDB } = await import('@/lib/db');
                 const [dbCandidates, dbJobs, dbAllInterviews] = await Promise.all([
@@ -378,7 +402,7 @@ export function DashboardProvider({ children }) {
                 ]);
 
                 if (dbCandidates.length > 0 || dbJobs.length > 0) {
-                    const formattedJobs = dbJobs.length > 0 ? dbJobs.map(j => ({
+                    let formattedJobs = dbJobs.length > 0 ? dbJobs.map(j => ({
                         id: j.id,
                         title: j.title,
                         description: j.description,
@@ -397,9 +421,9 @@ export function DashboardProvider({ children }) {
                         applicantCount: 0,
                         status: j.status,
                         createdAt: j.created_at
-                    })) : null;
+                    })) : [];
 
-                    const formattedCandidates = dbCandidates.map(c => {
+                    let formattedCandidates = dbCandidates.map(c => {
                         const assignments = dbAllInterviews
                             .filter(i => i.candidate_email === c.email)
                             .map(i => ({
@@ -408,6 +432,7 @@ export function DashboardProvider({ children }) {
                                 status: i.status,
                                 score: i.overall_score,
                                 matchScore: i.resume_match_score || null,
+                                analysis: i.skill_analysis || null, // Map skill_analysis from DB
                                 assignedAt: i.created_at
                             }));
 
@@ -424,31 +449,39 @@ export function DashboardProvider({ children }) {
                         };
                     });
 
+                    // ROLE-BASED FILTERING
+                    if (currentUser.role === 'CLIENT') {
+                        const assignedIds = new Set(currentUser.assigned_jobs || []);
+                        formattedJobs = formattedJobs.filter(j => assignedIds.has(j.id));
+                        formattedCandidates = formattedCandidates.filter(c => 
+                            c.jobAssignments && c.jobAssignments.some(a => assignedIds.has(a.jobId))
+                        );
+                    }
+
                     dispatch({
                         type: 'INIT',
                         payload: {
-                            jobs: formattedJobs || (localData ? localData.jobs : sampleJobs),
-                            candidates: formattedCandidates.length > 0 ? formattedCandidates : (localData ? localData.candidates : []),
+                            jobs: formattedJobs,
+                            candidates: formattedCandidates,
                             interviewCount: dbAllInterviews.filter(i => i.status === 'completed').length,
-                            user: state.user, // Preserve user from local storage
+                            user: currentUser,
                         }
                     });
-                    console.log('Dashboard synced with Supabase');
-                } else if (!localData) {
-                    // If no DB data and no local data, use sample data
-                    dispatch({ type: 'INIT', payload: { ...getInitialState(), user: state.user } });
+                    console.log(`Dashboard synced with Supabase (${currentUser.role} mode)`);
+                } else {
+                    // Fallback to sample/local
+                    dispatch({ type: 'INIT', payload: { ...(localData || getInitialState()), user: currentUser } });
                 }
             } catch (err) {
                 console.warn('Dashboard sync with Supabase failed:', err);
-                if (!localData) {
-                    dispatch({ type: 'INIT', payload: { ...getInitialState(), user: state.user } });
-                }
+                dispatch({ type: 'INIT', payload: { ...(localData || getInitialState()), user: currentUser } });
             } finally {
-                dispatch({ type: 'SET_LOADING', payload: false }); // Set loading false at end
+                dispatch({ type: 'SET_LOADING', payload: false });
             }
         }
         initDashboard();
     }, []); // Empty dependency array to run once on mount
+
 
     // Persist to localStorage as a cache/backup
     useEffect(() => {
@@ -517,13 +550,17 @@ export function DashboardProvider({ children }) {
 
     const addJob = async (jobData) => {
         try {
-            const { createJob } = await import('@/lib/db');
-            const newJob = await createJob(jobData);
-            if (newJob) {
+            const res = await fetch('/api/jobs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jobData)
+            });
+            const data = await res.json();
+            if (data.success) {
                 const formatted = {
                     ...jobData,
-                    id: newJob.id,
-                    createdAt: newJob.created_at,
+                    id: data.job.id,
+                    createdAt: data.job.created_at,
                     applicantCount: 0,
                     status: 'open'
                 };
@@ -539,9 +576,13 @@ export function DashboardProvider({ children }) {
 
     const updateJob = async (jobData) => {
         try {
-            const { updateJob: updateJobInDb } = await import('@/lib/db');
-            const updated = await updateJobInDb(jobData.id, jobData);
-            if (updated) {
+            const res = await fetch('/api/jobs', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jobData)
+            });
+            const data = await res.json();
+            if (data.success) {
                 dispatch({ type: 'UPDATE_JOB', payload: jobData });
                 return true;
             }
@@ -554,10 +595,16 @@ export function DashboardProvider({ children }) {
 
     const deleteJob = async (jobId) => {
         try {
-            const { deleteJob: deleteJobInDb } = await import('@/lib/db');
-            await deleteJobInDb(jobId);
-            dispatch({ type: 'DELETE_JOB', payload: jobId });
-            return true;
+            const res = await fetch('/api/jobs', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: jobId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                dispatch({ type: 'DELETE_JOB', payload: jobId });
+                return true;
+            }
         } catch (err) {
             console.error('Persistent deleteJob failed:', err);
         }
@@ -567,16 +614,24 @@ export function DashboardProvider({ children }) {
 
     const addCandidates = async (candidatesArray) => {
         try {
-            const { createCandidatesBatch } = await import('@/lib/db');
-            const saved = await createCandidatesBatch(candidatesArray);
-            if (saved) {
-                dispatch({ type: 'ADD_CANDIDATES', payload: candidatesArray });
-                return true;
+            const res = await fetch('/api/candidates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ candidates: candidatesArray })
+            });
+            const data = await res.json();
+            if (data.success) {
+                // Use the candidates returned from API (with real UUIDs)
+                const apiCandidates = data.candidates || candidatesArray;
+                dispatch({ type: 'ADD_CANDIDATES', payload: apiCandidates });
+                return apiCandidates;
             }
         } catch (err) {
             console.error('Persistent addCandidates failed:', err);
         }
+        // Fallback: use temporary IDs in reducer for offline/error cases
         dispatch({ type: 'ADD_CANDIDATES', payload: candidatesArray });
+        return candidatesArray;
     };
 
     const unassignFromJob = async (candidateId, jobId) => {
@@ -601,20 +656,9 @@ export function DashboardProvider({ children }) {
 
     const assignToJob = async (idSet, jobId, jobTitle) => {
         try {
-            const { createInterviewsBatch } = await import('@/lib/db');
-            const { supabase: persistentClient } = await import('@/lib/supabaseClient');
             const candidatesToAssign = state.candidates.filter(c => idSet.has(c.id));
 
-            // 1. Clear existing assignments for these candidates if possible
-            if (persistentClient) {
-                const emailsToClear = candidatesToAssign.map(c => c.email);
-                await persistentClient
-                    .from('interviews')
-                    .delete()
-                    .in('candidate_email', emailsToClear);
-            }
-
-            // 2. Create new "assigned" status records in Supabase
+            // Create new "assigned" status records in Supabase via API
             const inviteData = candidatesToAssign.map(c => ({
                 candidateEmail: c.email,
                 candidateName: c.name,
@@ -624,12 +668,24 @@ export function DashboardProvider({ children }) {
                 resumeText: c.resumeText
             }));
 
-            await createInterviewsBatch(inviteData);
-            dispatch({
-                type: 'ASSIGN_TO_JOB',
-                payload: { candidateIds: Array.from(idSet), jobId, jobTitle }
+            const res = await fetch('/api/interviews', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ interviews: inviteData })
             });
-            return true;
+
+            const data = await res.json();
+            if (data.success) {
+                dispatch({
+                    type: 'ASSIGN_TO_JOB',
+                    payload: { candidateIds: Array.from(idSet), jobId, jobTitle }
+                });
+                
+                // Trigger auto-matching for these candidates
+                matchCandidatesWithJob(idSet, jobId);
+                
+                return true;
+            }
         } catch (err) {
             console.error('Persistent assignToJob failed:', err);
         }
@@ -640,49 +696,144 @@ export function DashboardProvider({ children }) {
         });
     };
 
-    const updateMatchScore = async (candidateId, jobId, matchScore) => {
+    const matchCandidatesWithJob = async (idSet, jobId) => {
+        const job = state.jobs.find(j => j.id === jobId);
+        if (!job) return;
+
+        const candidatesToMatch = state.candidates.filter(c => idSet.has(c.id));
+        const { analyzeJDAndResume } = await import('@/lib/groqService');
+
+        for (const candidate of candidatesToMatch) {
+            if (!candidate.resumeText) continue;
+            try {
+                const result = await analyzeJDAndResume(job.description || job.title, candidate.resumeText);
+                const score = result.overall_match_score ?? result.match_score ?? result.matchScore;
+                if (score !== undefined) {
+                    await updateMatchScore(candidate.id, job.id, score, result);
+                }
+            } catch (err) {
+                console.error(`Auto-match failed for ${candidate.email}:`, err);
+            }
+        }
+    };
+
+    const updateMatchScore = async (candidateId, jobId, score, analysis = null) => {
         try {
             const candidate = state.candidates.find(c => c.id === candidateId);
             if (candidate) {
-                // Skip persistent update if adminSupabase is null (client-side)
-                // or if schema is missing resume_match_score
-                const { adminSupabase: admin } = await import('@/lib/supabaseClient');
-                if (admin) {
-                    try {
-                        await admin
-                            .from('interviews')
-                            .update({ resume_match_score: matchScore })
-                            .eq('candidate_email', candidate.email)
-                            .eq('job_id', jobId);
-                    } catch (dbErr) {
-                        console.warn('DB update skipped:', dbErr.message);
-                    }
+                const res = await fetch('/api/interviews', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: candidate.email,
+                        jobId,
+                        updates: { resume_match_score: score, skill_analysis: analysis }
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    dispatch({ type: 'UPDATE_CANDIDATE_MATCH_SCORE', payload: { candidateId, jobId, matchScore: score, analysis } });
                 }
             }
         } catch (err) {
-            console.error('Persistent updateMatchScore skipped:', err);
+            console.error('Persistent updateMatchScore failed:', err);
         }
-        dispatch({ type: 'UPDATE_CANDIDATE_MATCH_SCORE', payload: { candidateId, jobId, matchScore } });
+        dispatch({ type: 'UPDATE_CANDIDATE_MATCH_SCORE', payload: { candidateId, jobId, matchScore: score, analysis } });
     };
 
-    const updateUser = (userData) => {
+    const updateCandidateJobStatus = async (candidateId, jobId, status, score = null) => {
+        try {
+            const candidate = state.candidates.find(c => c.id === candidateId);
+            if (candidate) {
+                const res = await fetch('/api/interviews', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: candidate.email,
+                        jobId,
+                        updates: { status, ...(score != null ? { overall_score: score } : {}) }
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    dispatch({
+                        type: 'UPDATE_CANDIDATE_JOB_STATUS',
+                        payload: { candidateId, jobId, status, score },
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('Persistent updateCandidateJobStatus failed:', err);
+        }
+        dispatch({
+            type: 'UPDATE_CANDIDATE_JOB_STATUS',
+            payload: { candidateId, jobId, status, score },
+        });
+    };
+
+    const updateUser = async (userData) => {
         dispatch({ type: 'UPDATE_USER', payload: userData });
         if (typeof window !== 'undefined') {
             const currentUser = state.user || {};
-            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify({ ...currentUser, ...userData }));
+            const merged = { ...currentUser, ...userData };
+            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(merged));
+            
+            // Sync with Supabase Auth Metadata
+            try {
+                const { supabase: client } = await import('@/lib/supabaseClient');
+                if (client) {
+                    await client.auth.updateUser({
+                        data: {
+                            full_name: merged.name,
+                            company_name: merged.companyName,
+                            designation: merged.designation,
+                            phone: merged.phone
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Sync profile to Auth failed:', err);
+            }
         }
+    };
+
+    const removeCandidate = async (candidate) => {
+        try {
+            const res = await fetch('/api/delete-candidate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: candidate.email })
+            });
+            const data = await res.json();
+            if (data.success) {
+                dispatch({ type: 'REMOVE_CANDIDATE', payload: candidate.id });
+                return true;
+            }
+        } catch (err) {
+            console.error('Persistent removeCandidate failed:', err);
+        }
+        return false;
     };
 
     const updateCandidate = async (id, updates) => {
         try {
-            const { updateCandidate: updateCandidateInDb } = await import('@/lib/db');
-            await updateCandidateInDb(id, updates);
+            const res = await fetch('/api/candidates', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, updates })
+            });
+            const data = await res.json();
+            if (data.success) {
+                dispatch({ type: 'UPDATE_CANDIDATE', payload: { id, updates } });
+                return true;
+            }
         } catch (err) {
             console.error('Persistent updateCandidate failed:', err);
         }
         dispatch({ type: 'UPDATE_CANDIDATE', payload: { id, updates } });
+        return false;
     };
-
+ 
     return (
         <DashboardContext.Provider value={{
             state,
@@ -693,9 +844,12 @@ export function DashboardProvider({ children }) {
             deleteJob,
             addCandidates,
             updateCandidate,
+            removeCandidate,
             unassignFromJob,
             assignToJob,
+            matchCandidatesWithJob,
             updateMatchScore,
+            updateCandidateJobStatus,
             updateUser
         }}>
             {children}

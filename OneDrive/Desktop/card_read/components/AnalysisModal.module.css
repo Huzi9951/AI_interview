@@ -1,0 +1,259 @@
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.modal {
+    background: #ffffff;
+    width: 100%;
+    max-width: 800px;
+    max-height: 90vh;
+    border-radius: 24px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header {
+    padding: 24px 32px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin: 4px 0 0 0;
+}
+
+.closeBtn {
+    background: #f1f5f9;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.closeBtn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.body {
+    padding: 32px;
+    overflow-y: auto;
+}
+
+.scoreSection {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    background: #f8fafc;
+    padding: 24px;
+    border-radius: 20px;
+    margin-bottom: 32px;
+}
+
+.scoreCircle {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    border: 4px solid #e8604c;
+}
+
+.scoreValue {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #e8604c;
+}
+
+.scoreLabel {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.scoreInfo h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    color: #0f172a;
+}
+
+.scoreInfo p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #475569;
+    line-height: 1.5;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.card {
+    background: #ffffff;
+    border: 1px solid #f1f5f9;
+    padding: 20px;
+    border-radius: 16px;
+    transition: all 0.2s;
+}
+
+.card:hover {
+    border-color: #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.cardTitle {
+    margin: 0 0 16px 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.list {
+    margin: 0;
+    padding: 0 0 0 20px;
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.list li {
+    margin-bottom: 8px;
+}
+
+.tagGroup {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tagMatch {
+    padding: 4px 12px;
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #dcfce7;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.tagGap {
+    padding: 4px 12px;
+    background: #fff1f2;
+    color: #e11d48;
+    border: 1px solid #ffe4e6;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.emptyTag {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.focusSection {
+    background: #fffbeb;
+    padding: 24px;
+    border-radius: 20px;
+    border: 1px solid #fef3c7;
+}
+
+.focusList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.focusList li {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+    color: #92400e;
+    font-weight: 500;
+}
+
+.focusList li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: #f59e0b;
+    font-weight: 800;
+}
+
+.footer {
+    padding: 20px 32px;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.doneBtn {
+    padding: 10px 32px;
+    background: #0f172a;
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.doneBtn:hover {
+    background: #1e293b;
+    transform: translateY(-1px);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    .scoreSection { flex-direction: column; text-align: center; }
+}

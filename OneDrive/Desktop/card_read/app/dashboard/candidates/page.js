@@ -3,6 +3,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useDashboard } from '@/context/DashboardContext';
+import { supabase } from '@/lib/supabaseClient';
+import AnalysisModal from '@/components/AnalysisModal';
 import styles from './candidates.module.css';
 
 // Extract emails (and optionally names/phones) from text
@@ -36,7 +38,7 @@ function parseContacts(text) {
 }
 
 export default function CandidatesPage() {
-    const { state, dispatch, addCandidates, updateCandidate, assignToJob, updateMatchScore } = useDashboard();
+    const { state, dispatch, addCandidates, updateCandidate, assignToJob, matchCandidatesWithJob, updateMatchScore, removeCandidate } = useDashboard();
     const fileInputRef = useRef(null);
     const [manualName, setManualName] = useState('');
     const [manualEmail, setManualEmail] = useState('');
@@ -61,10 +63,24 @@ export default function CandidatesPage() {
     const [previewQuestions, setPreviewQuestions] = useState([]); // [{question, expectedAnswer, target_skill, source}]
     const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
     const [sendProgress, setSendProgress] = useState({ sent: 0, total: 0, done: false });
-    
+
     // Selection Bar state
     const [selectionJobId, setSelectionJobId] = useState('');
     const [isMatching, setIsMatching] = useState(false);
+
+    // Analysis Modal State
+    const [showAnalysis, setShowAnalysis] = useState(false);
+    const [currentAnalysis, setCurrentAnalysis] = useState(null);
+    const [analysisCandidateName, setAnalysisCandidateName] = useState('');
+
+    const handleScoreClick = (candidate, jobId) => {
+        const assignment = (candidate.jobAssignments || []).find(a => a.jobId === jobId);
+        if (assignment && assignment.analysis) {
+            setCurrentAnalysis(assignment.analysis);
+            setAnalysisCandidateName(candidate.name || candidate.email);
+            setShowAnalysis(true);
+        }
+    };
 
     useEffect(() => {
         const fetchInterviews = async () => {
@@ -125,21 +141,21 @@ export default function CandidatesPage() {
                                 email: extracted.email,
                                 name: extracted.name || '',
                                 phone: extracted.phone || '',
-                                source: file.name,
+                                source: 'Via Upload',
                                 resumeText: text // Store full text for AI matching
                             });
                         } else {
                             // Fallback to basic extraction if AI returns empty email
                             const contacts = parseContacts(text);
                             if (contacts.length > 0) {
-                                newCandidates.push({ ...contacts[0], source: file.name, resumeText: text });
+                                newCandidates.push({ ...contacts[0], source: 'upload', resumeText: text });
                             }
                         }
                     } catch (parseErr) {
                         // Fallback to basic extraction if AI fails
                         const contacts = parseContacts(text);
                         if (contacts.length > 0) {
-                            newCandidates.push({ ...contacts[0], source: file.name, resumeText: text });
+                            newCandidates.push({ ...contacts[0], source: 'upload', resumeText: text });
                         }
                     }
                 } catch (fileErr) {
@@ -163,7 +179,28 @@ export default function CandidatesPage() {
     const handleAddManual = async () => {
         const email = manualEmail.trim();
         if (!email || !email.includes('@')) return;
-        await addCandidates([{ email, name: manualName.trim(), phone: manualPhone.trim(), source: 'Manual' }]);
+        
+        const candidateData = { 
+            email, 
+            name: manualName.trim(), 
+            phone: manualPhone.trim(), 
+            source: 'Manual' 
+        };
+        
+        const added = await addCandidates([candidateData]);
+        
+        // Auto-assign if a job is selected in the toolbar
+        if (selectionJobId && added && added.length > 0) {
+            const job = state.jobs.find(j => j.id === selectionJobId);
+            if (job) {
+                // Use the first added candidate (since we only added one)
+                const c = added[0];
+                if (c && c.id) {
+                    await assignToJob(new Set([c.id]), job.id, job.title);
+                }
+            }
+        }
+        
         setManualEmail(''); setManualName(''); setManualPhone('');
         showToast(`✓ Added ${manualName.trim() || email}`);
     };
@@ -215,9 +252,9 @@ export default function CandidatesPage() {
         if (selectedIds.size === 0) return;
 
         const selectedCandidates = state.candidates.filter(c => selectedIds.has(c.id));
-        
+
         // Find if all selected candidates have the same assigned job
-        const commonJobId = selectedCandidates.length > 0 
+        const commonJobId = selectedCandidates.length > 0
             ? (selectedCandidates[0].jobAssignments?.[0]?.jobId || '')
             : '';
         const allSameJob = selectedCandidates.every(c => (c.jobAssignments?.[0]?.jobId || '') === commonJobId);
@@ -237,7 +274,7 @@ export default function CandidatesPage() {
         setInviteQuestions([{ question: '', expectedAnswer: '' }]);
         setPreviewQuestions([]);
         setSendProgress({ sent: 0, total: 0, done: false });
-        
+
         if (allSameJob && commonJobId) {
             setInviteJobId(commonJobId);
             setInviteStep(2); // Skip job selection
@@ -245,18 +282,31 @@ export default function CandidatesPage() {
             setInviteJobId('');
             setInviteStep(1);
         }
-        
+
         setShowInvite(true);
     };
 
     const handleRemoveCandidate = async (candidate) => {
-        dispatch({ type: 'REMOVE_CANDIDATE', payload: candidate.id });
+        if (!confirm(`Are you sure you want to permanently remove ${candidate.name || candidate.email}? This will delete all their interview records and recordings.`)) return;
+
+        showToast(`⏳ Removing ${candidate.name || candidate.email}...`);
+
         try {
-            const { deleteCandidateDataCompletely } = await import('@/lib/db');
-            await deleteCandidateDataCompletely(candidate.email);
-            showToast(`✓ Database records and files for ${candidate.name || candidate.email} removed.`);
+            const success = await removeCandidate(candidate);
+            if (success) {
+                showToast(`✓ Records removed for ${candidate.name || candidate.email}`);
+                // Clear selection if deleted
+                setSelectedIds(prev => {
+                    const n = new Set(prev);
+                    n.delete(candidate.id);
+                    return n;
+                });
+            } else {
+                showToast(`⚠ Failed to remove all records for ${candidate.email}`);
+            }
         } catch (err) {
-            console.error('Failed to delete candidate data from DB:', err);
+            console.error('Failed to delete candidate:', err);
+            showToast(`⚠ Error removing candidate: ${err.message}`);
         }
     };
 
@@ -299,7 +349,7 @@ export default function CandidatesPage() {
     const handleUpdateCandidate = async (e) => {
         e.preventDefault();
         if (!editingCandidate) return;
-        
+
         const updates = {
             name: editingCandidate.name,
             email: editingCandidate.email,
@@ -374,13 +424,9 @@ export default function CandidatesPage() {
                     dispatch({ type: 'UPDATE_CANDIDATE_JOB_STATUS', payload: { candidateId: cId, jobId: job.id, status: 'invited' } });
                 }
 
-                // Also update the old invite fields
-                dispatch({
-                    type: 'INVITE_CANDIDATES',
-                    payload: { emails: successEmails, jobId: job.id, jobTitle: job.title, customQuestions: questionsPayload },
-                });
+                // Trigger auto-matching for successfully invited candidates
+                matchCandidatesWithJob(new Set(successCandidateIds), job.id);
 
-                setSendProgress({ sent: successEmails.length, total: selectedCandidates.length, done: true });
                 showToast(`✓ ${data.message}`);
             } else {
                 setSendProgress(prev => ({ ...prev, done: true }));
@@ -419,31 +465,18 @@ export default function CandidatesPage() {
         if (!job) return;
 
         try {
+            setIsMatching(true);
             // First, assign all selected candidates to this job (enforces single job rule)
+            // assignToJob already triggers matchCandidatesWithJob
             await assignToJob(selectedIds, job.id, job.title);
-            
-            const { analyzeJDAndResume } = await import('@/lib/groqService');
-            const selectedCandidates = state.candidates.filter(c => selectedIds.has(c.id));
-            
-            for (const candidate of selectedCandidates) {
-                if (!candidate.resumeText) continue;
-                try {
-                    const result = await analyzeJDAndResume(job.description || job.title, candidate.resumeText);
-                    // Standardize on overall_match_score from AI results
-                    const score = result.overall_match_score ?? result.match_score ?? result.matchScore;
-                    if (score !== undefined) {
-                        await updateMatchScore(candidate.id, job.id, score);
-                    }
-                } catch (candidateErr) {
-                    console.error(`Match failed for ${candidate.email}:`, candidateErr);
-                }
-            }
             showToast(`✓ AI Matching complete for selection`);
         } catch (err) {
             console.error('Selection match failed:', err);
             showToast('⚠ AI Matching failed');
         } finally {
             setIsMatching(false);
+            setSelectedIds(new Set());
+            setSelectionJobId('');
         }
     };
 
@@ -455,7 +488,7 @@ export default function CandidatesPage() {
         try {
             await assignToJob(new Set([candidateId]), job.id, job.title);
             showToast(`✓ Candidate assigned to ${job.title}`);
-            
+
             // Auto-trigger match if resume exists
             const candidate = state.candidates.find(c => c.id === candidateId);
             if (candidate && candidate.resumeText) {
@@ -464,7 +497,7 @@ export default function CandidatesPage() {
                     const result = await analyzeJDAndResume(job.description || job.title, candidate.resumeText);
                     const score = result.overall_match_score ?? result.match_score ?? result.matchScore;
                     if (score !== undefined) {
-                        await updateMatchScore(candidateId, job.id, score);
+                        await updateMatchScore(candidateId, job.id, score, result);
                     }
                 } catch (err) {
                     console.error('Match failed:', err);
@@ -500,7 +533,7 @@ export default function CandidatesPage() {
                 <div className={styles.headerActions}>
                     {selectedIds.size > 0 && (
                         <div className={styles.bulkActions}>
-                            <select 
+                            <select
                                 className={styles.toolbarJobSelect}
                                 value={selectionJobId}
                                 onChange={(e) => setSelectionJobId(e.target.value)}
@@ -510,14 +543,14 @@ export default function CandidatesPage() {
                                     <option key={j.id} value={j.id}>{j.title}</option>
                                 ))}
                             </select>
-                            <button 
+                            <button
                                 className={styles.bulkAssignBtn}
                                 disabled={!selectionJobId || isMatching}
                                 onClick={handleSelectionAssign}
                             >
                                 Assign
                             </button>
-                            <button 
+                            <button
                                 className={styles.bulkMatchBtn}
                                 disabled={!selectionJobId || isMatching}
                                 onClick={handleSelectionMatch}
@@ -623,7 +656,7 @@ export default function CandidatesPage() {
 
                                                     let displayHr = ja.status;
                                                     if (ja.status === 'completed' || ja.status === 'interviewed') displayHr = 'under review';
-                                                    
+
                                                     const interviewData = candidateInterviews[c.email];
                                                     const rec = interviewData?.hire_recommendation || '';
                                                     const isYes = rec.toLowerCase().includes('yes');
@@ -644,7 +677,7 @@ export default function CandidatesPage() {
                                                         </div>
                                                     );
                                                 })()}
-                                                <select 
+                                                <select
                                                     className={styles.inlineJobSelect}
                                                     value=""
                                                     onChange={(e) => handleInlineAssign(c.id, e.target.value)}
@@ -662,12 +695,16 @@ export default function CandidatesPage() {
                                         <td>
                                             {(() => {
                                                 const targetAssignment = (c.jobAssignments || [])[0];
-                                                
+
                                                 if (targetAssignment && targetAssignment.matchScore !== undefined && targetAssignment.matchScore !== null) {
                                                     return (
-                                                        <div className={styles.matchScoreWrapper}>
+                                                        <div
+                                                            className={`${styles.matchScoreWrapper} ${targetAssignment.analysis ? styles.clickable : ''}`}
+                                                            onClick={() => targetAssignment.analysis && handleScoreClick(c, targetAssignment.jobId)}
+                                                            title={targetAssignment.analysis ? "Click for Deep Analysis" : ""}
+                                                        >
                                                             <div className={styles.matchScoreBar}>
-                                                                <div className={styles.matchScoreFill} style={{ 
+                                                                <div className={styles.matchScoreFill} style={{
                                                                     width: `${targetAssignment.matchScore}%`,
                                                                     backgroundColor: targetAssignment.matchScore > 75 ? '#22c55e' : targetAssignment.matchScore > 50 ? '#eab308' : '#ef4444'
                                                                 }} />
@@ -717,8 +754,8 @@ export default function CandidatesPage() {
                                     {inviteStep === 5 && 'Sending Invites...'}
                                 </h2>
                                 <p className={styles.modalSubtitle}>
-                                    {inviteStep < 5 
-                                        ? `${selectedIds.size} candidate(s) selected • Step ${inviteStep} of 4` 
+                                    {inviteStep < 5
+                                        ? `${selectedIds.size} candidate(s) selected • Step ${inviteStep} of 4`
                                         : `${sendProgress.sent}/${sendProgress.total} sent`}
                                     {inviteJobId && inviteStep > 1 && inviteStep < 5 && (
                                         <span style={{ marginLeft: 8, color: '#818cf8', fontWeight: 600 }}>
@@ -973,29 +1010,29 @@ export default function CandidatesPage() {
                                 <div className={styles.modalFormContent}>
                                     <div className={styles.modalField}>
                                         <label className={styles.modalLabel}>Full Name</label>
-                                        <input 
-                                            className={styles.modalInput} 
-                                            value={editingCandidate.name} 
-                                            onChange={e => setEditingCandidate({ ...editingCandidate, name: e.target.value })} 
-                                            required 
+                                        <input
+                                            className={styles.modalInput}
+                                            value={editingCandidate.name}
+                                            onChange={e => setEditingCandidate({ ...editingCandidate, name: e.target.value })}
+                                            required
                                         />
                                     </div>
                                     <div className={styles.modalField}>
                                         <label className={styles.modalLabel}>Email Address</label>
-                                        <input 
-                                            className={styles.modalInput} 
+                                        <input
+                                            className={styles.modalInput}
                                             type="email"
-                                            value={editingCandidate.email} 
-                                            onChange={e => setEditingCandidate({ ...editingCandidate, email: e.target.value })} 
-                                            required 
+                                            value={editingCandidate.email}
+                                            onChange={e => setEditingCandidate({ ...editingCandidate, email: e.target.value })}
+                                            required
                                         />
                                     </div>
                                     <div className={styles.modalField}>
                                         <label className={styles.modalLabel}>Phone Number</label>
-                                        <input 
-                                            className={styles.modalInput} 
-                                            value={editingCandidate.phone} 
-                                            onChange={e => setEditingCandidate({ ...editingCandidate, phone: e.target.value })} 
+                                        <input
+                                            className={styles.modalInput}
+                                            value={editingCandidate.phone}
+                                            onChange={e => setEditingCandidate({ ...editingCandidate, phone: e.target.value })}
                                         />
                                     </div>
                                 </div>
@@ -1008,6 +1045,13 @@ export default function CandidatesPage() {
                     </div>
                 </div>
             )}
+            {/* ═══════════ Deep Analysis Modal ═══════════ */}
+            <AnalysisModal
+                isOpen={showAnalysis}
+                onClose={() => setShowAnalysis(false)}
+                analysis={currentAnalysis}
+                candidateName={analysisCandidateName}
+            />
         </div>
     );
 }

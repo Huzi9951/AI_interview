@@ -19,11 +19,19 @@ function Sidebar() {
     const pathname = usePathname();
     const { state } = useDashboard();
     const user = state.user || {};
+    const role = user.role || 'ADMIN';
 
     const isActive = (href) => {
         if (href === '/dashboard') return pathname === '/dashboard';
         return pathname.startsWith(href);
     };
+
+    const filteredNavItems = navItems.filter(item => {
+        if (role === 'CLIENT') {
+            return !['/dashboard/settings', '/setup'].includes(item.href);
+        }
+        return true;
+    });
 
     return (
         <aside className={styles.sidebar}>
@@ -35,7 +43,8 @@ function Sidebar() {
             </div>
 
             <nav className={styles.sidebarNav}>
-                {navItems.map(item => (
+                {filteredNavItems.map(item => (
+
                     <Link
                         key={item.href}
                         href={item.href}

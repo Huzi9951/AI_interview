@@ -3,11 +3,27 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useDashboard } from '@/context/DashboardContext';
+import { supabase } from '@/lib/supabaseClient';
+import AnalysisModal from '@/components/AnalysisModal';
 import styles from './jobs.module.css';
 
 export default function JobsPage() {
-    const { state, dispatch, unassignFromJob, assignToJob, updateMatchScore } = useDashboard();
+    const { state, dispatch, unassignFromJob, assignToJob, updateMatchScore, deleteJob } = useDashboard();
     const [selectedJob, setSelectedJob] = useState(null);
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    
+    // Analysis Modal State
+    const [showAnalysis, setShowAnalysis] = useState(false);
+    const [currentAnalysis, setCurrentAnalysis] = useState(null);
+    const [analysisCandidateName, setAnalysisCandidateName] = useState('');
+
+    const handleScoreClick = (c, jobId) => {
+        if (c.analysis) {
+            setCurrentAnalysis(c.analysis);
+            setAnalysisCandidateName(c.name || c.email);
+            setShowAnalysis(true);
+        }
+    };
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState('details'); // details | candidates
     const [statusFilter, setStatusFilter] = useState('all'); // all | assigned | invited | awaiting_review | accepted | rejected
@@ -54,7 +70,8 @@ export default function JobsPage() {
                 ...c,
                 jobStatus: assignment?.status || 'assigned',
                 jobScore: assignment?.score,
-                matchScore: assignment?.matchScore // AI Resume Match Score
+                matchScore: assignment?.matchScore, // AI Resume Match Score
+                analysis: assignment?.analysis
             };
         });
     };
@@ -85,7 +102,7 @@ export default function JobsPage() {
                 try {
                     const result = await analyzeJDAndResume(jd, candidate.resumeText);
                     if (result && result.overall_match_score !== undefined) {
-                        await updateMatchScore(id, selectedJob.id, result.overall_match_score);
+                        await updateMatchScore(id, selectedJob.id, result.overall_match_score, result);
                     }
                 } catch (err) {
                     console.error(`Match analysis failed for ${candidate.email}:`, err);
@@ -94,7 +111,7 @@ export default function JobsPage() {
         });
     };
 
-    // ── Open single invite modal (with question preview) ──
+    // â”€â”€ Open single invite modal (with question preview) â”€â”€
     const openInviteFor = (candidate) => {
         if (candidate.jobStatus === 'invited') {
             if (!confirm(`An invite was already sent to ${candidate.name || candidate.email} for this role. Are you sure you want to send another one?`)) {
@@ -110,7 +127,7 @@ export default function JobsPage() {
         setShowInviteModal(true);
     };
 
-    // ── Generate AI questions for preview ──
+    // â”€â”€ Generate AI questions for preview â”€â”€
     const generateQuestionsForPreview = async () => {
         if (!selectedJob) return;
         setIsGeneratingQuestions(true);
@@ -132,7 +149,7 @@ export default function JobsPage() {
             setPreviewQuestions([...manualQs, ...aiQuestions]);
         } catch (err) {
             console.error('Failed to generate questions:', err);
-            showToast('⚠ Failed to generate AI questions.');
+            showToast('⚠️ Failed to generate AI questions.');
             const manualQs = inviteQuestions.filter(q => q.question.trim()).map(q => ({
                 question: q.question,
                 expectedAnswer: q.expectedAnswer || '',
@@ -152,7 +169,7 @@ export default function JobsPage() {
         setPreviewQuestions(newQ);
     };
 
-    // ── Send invite via API ──
+    // â”€â”€ Send invite via API â”€â”€
     const handleSendInvite = async () => {
         if (!inviteCandidate || !selectedJob) return;
         setInviteStep(4);
@@ -192,21 +209,18 @@ export default function JobsPage() {
                 });
                 showToast(`✓ Invite sent to ${inviteCandidate.name || inviteCandidate.email}!`);
             } else {
-                showToast(`⚠ Failed: ${data.error || 'Unknown error'}`);
+                showToast(`⚠️ Failed: ${data.error || 'Unknown error'}`);
             }
         } catch (err) {
-            showToast(`⚠ Error sending invite: ${err.message}`);
+            showToast(`⚠️ Error sending invite: ${err.message}`);
         } finally {
             setInviteSending(false);
             setShowInviteModal(false);
         }
     };
 
-    const handleStatusUpdate = (candidateId, newStatus) => {
-        dispatch({
-            type: 'UPDATE_CANDIDATE_JOB_STATUS',
-            payload: { candidateId, jobId: selectedJob.id, status: newStatus },
-        });
+    const handleStatusUpdate = async (candidateId, newStatus) => {
+        await updateCandidateJobStatus(candidateId, selectedJob.id, newStatus);
         showToast(`✓ Candidate ${newStatus}`);
     };
 
@@ -231,7 +245,7 @@ export default function JobsPage() {
     const statusBadge = (status, score) => {
         const map = {
             assigned: { label: '📋 Assigned', cls: styles.badgeAssigned },
-            invited: { label: '📧 Invited', cls: styles.badgeInvited },
+            invited: { label: '📤 Invited', cls: styles.badgeInvited },
             completed: { label: `✅ Completed${score != null ? ` (${score}/100)` : ''}`, cls: styles.badgeInterviewed },
             interviewed: { label: '✅ Interviewed', cls: styles.badgeInterviewed },
             accepted: { label: '🎉 Accepted', cls: styles.badgeAccepted },
@@ -286,27 +300,22 @@ export default function JobsPage() {
                                 <div className={styles.detailActions}>
                                     <button className={`${styles.statusToggle} ${selectedJob.status === 'open' ? styles.statusOpen : styles.statusClosed}`}
                                         onClick={() => dispatch({ type: 'TOGGLE_JOB_STATUS', payload: selectedJob.id })}>
-                                        {selectedJob.status === 'open' ? '🟢 Open' : '🔴 Closed'}
+                                        {selectedJob.status === 'open' ? 'Open' : 'Closed'}
                                     </button>
                                     <button className={styles.deleteBtn} disabled={isDeletingJob} onClick={async () => {
                                         if (confirm('Are you absolutely sure you want to delete this job? ALL associated candidate assignments, interview records, and video recordings across the system will be permanently deleted.')) {
                                             setIsDeletingJob(true);
-                                            try {
-                                                const { deleteJobDataCompletely } = await import('@/lib/db');
-                                                await deleteJobDataCompletely(selectedJob.id);
-
-                                                dispatch({ type: 'DELETE_JOB', payload: selectedJob.id });
+                                            const success = await deleteJob(selectedJob.id);
+                                            if (success) {
                                                 setSelectedJob(null);
-                                                showToast('✓ Job and all associated data deleted completely');
-                                            } catch (err) {
-                                                console.error(err);
-                                                showToast('⚠ Failed to wipe all associated Job data.');
-                                            } finally {
-                                                setIsDeletingJob(false);
+                                                showToast('Job and all associated data deleted completely');
+                                            } else {
+                                                showToast('Failed to wipe all associated Job data.');
                                             }
+                                            setIsDeletingJob(false);
                                         }
                                     }}>
-                                        {isDeletingJob ? '🗑️...' : '🗑️'}
+                                        {isDeletingJob ? 'Deleting...' : 'Delete'}
                                     </button>
                                 </div>
                             </div>
@@ -401,7 +410,7 @@ export default function JobsPage() {
                                                             </td>
                                                             <td>
                                                                 {c.matchScore !== undefined && c.matchScore !== null ? (
-                                                                    <div className={styles.matchScoreWrapper}>
+                                                                    <div className={`${styles.matchScoreWrapper} ${c.analysis ? styles.clickable : ""}`} onClick={() => c.analysis && handleScoreClick(c, selectedJob.id)} title={c.analysis ? "Click for Deep Analysis" : ""}>
                                                                         <div className={styles.matchScoreBar}>
                                                                             <div className={styles.matchScoreFill} style={{
                                                                                 width: `${c.matchScore}%`,
@@ -419,14 +428,14 @@ export default function JobsPage() {
                                                                     <div className={styles.cActions}>
                                                                         {(c.jobStatus === 'assigned') && (
                                                                             <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
-                                                                                📧 Send Invite
+                                                                                📤 Send Invite
                                                                             </button>
                                                                         )}
                                                                         {c.jobStatus === 'invited' && (
                                                                             <>
                                                                                 <span className={styles.actionWaiting} style={{ marginRight: 8 }}>⏳ Awaiting</span>
                                                                                 <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
-                                                                                    📧 Resend Invite
+                                                                                    📤 Resend Invite
                                                                                 </button>
                                                                             </>
                                                                         )}
@@ -478,7 +487,7 @@ export default function JobsPage() {
                 </div>
             </div>
 
-            {/* ═══════════ Assign Candidates Modal ═══════════ */}
+            {/* — Assign Candidates Modal — */}
             {showAssignModal && selectedJob && (
                 <div className={styles.modalOverlay} onClick={() => setShowAssignModal(false)}>
                     <div className={styles.modal} onClick={e => e.stopPropagation()}>
@@ -534,7 +543,7 @@ export default function JobsPage() {
                 </div>
             )}
 
-            {/* ═══════════ Send Invite Modal (with Question Preview) ═══════════ */}
+            {/* — Send Invite Modal (with Question Preview) — */}
             {showInviteModal && inviteCandidate && selectedJob && (
                 <div className={styles.modalOverlay} onClick={() => setShowInviteModal(false)}>
                     <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 580 }}>
@@ -632,7 +641,7 @@ export default function JobsPage() {
                                                                     color: q.source === 'ai' ? '#6366f1' : '#e8604c',
                                                                     fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6, fontWeight: 600,
                                                                 }}>
-                                                                    {q.source === 'ai' ? '🤖 AI' : '✏️ Manual'}
+                                                                    🤖 AI
                                                                 </span>
                                                                 {q.target_skill && (
                                                                     <span style={{ color: '#9ca3af', fontSize: '0.72rem' }}>• {q.target_skill}</span>
@@ -682,7 +691,7 @@ export default function JobsPage() {
                                             </div>
 
                                             <div className={styles.invitePreview} style={{ marginTop: 16 }}>
-                                                <div className={styles.invitePreviewIcon}>📧</div>
+                                                <div className={styles.invitePreviewIcon}>📤</div>
                                                 <div>
                                                     <strong>To:</strong> {inviteCandidate.email}<br />
                                                     <strong>Expiry:</strong> {inviteExpiryHours} hours<br />
@@ -704,7 +713,7 @@ export default function JobsPage() {
                         </div>
                         <div className={styles.modalFooter}>
                             {inviteStep > 1 && inviteStep < 4 && (
-                                <button className={styles.modalCancel} onClick={() => setInviteStep(inviteStep - 1)}>← Back</button>
+                                <button className={styles.modalCancel} onClick={() => setInviteStep(inviteStep - 1)}>â† Back</button>
                             )}
                             {inviteStep < 3 ? (
                                 <button className={styles.modalSend} onClick={async () => {
@@ -732,7 +741,16 @@ export default function JobsPage() {
                 </div>
             )}
 
+            {/* Deep Analysis Modal */}
+            <AnalysisModal 
+                isOpen={showAnalysis} 
+                onClose={() => setShowAnalysis(false)} 
+                analysis={currentAnalysis} 
+                candidateName={analysisCandidateName} 
+            />
+
             {toast && <div className={styles.toast}>{toast}</div>}
         </div>
     );
 }
+

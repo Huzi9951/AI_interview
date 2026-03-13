@@ -100,6 +100,49 @@ export async function updateInterviewStatus(id, status, extra = {}) {
     return data;
 }
 
+/** Update Resume Match Score and Analysis for an assignment */
+export async function updateMatchScore(candidateId, jobId, score, analysis = {}) {
+    if (!adminSupabase) return null;
+    
+    // First find candidate email
+    const { data: candidate } = await adminSupabase
+        .from('candidates')
+        .select('email')
+        .eq('id', candidateId)
+        .single();
+        
+    if (!candidate) return null;
+
+    const { data, error } = await adminSupabase
+        .from('interviews')
+        .update({ 
+            resume_match_score: score,
+            skill_analysis: analysis 
+        })
+        .eq('candidate_email', candidate.email)
+        .eq('job_id', jobId)
+        .select();
+        
+    if (error) console.error('updateMatchScore error:', error);
+    return data;
+}
+
+/** Update interview status by email and jobId (convenience) */
+export async function updateInterviewStatusByEmail(email, jobId, status, extra = {}) {
+    if (!adminSupabase) return null;
+    const updatePayload = { status, ...extra };
+    
+    const { data, error } = await adminSupabase
+        .from('interviews')
+        .update(updatePayload)
+        .eq('candidate_email', email)
+        .eq('job_id', jobId)
+        .select();
+        
+    if (error) console.error('updateInterviewStatusByEmail error:', error);
+    return data;
+}
+
 /** Mark interview as in-progress */
 export async function startInterviewRecord(interviewId) {
     if (!supabase) return null;
