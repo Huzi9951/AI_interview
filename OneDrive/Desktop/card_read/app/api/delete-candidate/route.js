@@ -37,12 +37,16 @@ export async function POST(request) {
             .filter(i => i.recording_url)
             .map(i => {
                 try {
-                    const url = new URL(i.recording_url);
-                    const parts = url.pathname.split('/');
-                    return 'recordings/' + parts[parts.length - 1]; // e.g. recordings/id_time.webm
-                } catch {
+                    const urlObj = new URL(i.recording_url);
+                    const parts = urlObj.pathname.split('/');
+                    const idx = parts.indexOf('interview-recordings');
+                    if (idx !== -1 && idx < parts.length - 1) {
+                        return parts.slice(idx + 1).join('/');
+                    }
+                } catch (e) {
                     return null;
                 }
+                return null;
             })
             .filter(Boolean);
 

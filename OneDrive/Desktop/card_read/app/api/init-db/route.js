@@ -99,6 +99,11 @@ async function handleInit() {
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='interviews' AND column_name='token_hash') THEN
                         ALTER TABLE interviews ADD COLUMN token_hash TEXT;
                     END IF;
+                    
+                    -- Jobs table migrations
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='saved_questions') THEN
+                        ALTER TABLE jobs ADD COLUMN saved_questions JSONB DEFAULT '[]';
+                    END IF;
                 END $$;
 
                 CREATE INDEX IF NOT EXISTS idx_interviews_token ON interviews(token_hash);

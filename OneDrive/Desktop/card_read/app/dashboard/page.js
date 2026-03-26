@@ -7,6 +7,8 @@ import styles from './dashboard.module.css';
 export default function DashboardPage() {
     const { state, getStats } = useDashboard();
     const stats = getStats();
+    const user = state.user || {};
+    const role = user.role || 'ADMIN';
 
     const openJobsList = state.jobs
         .filter(j => j.status === 'open')
@@ -34,17 +36,29 @@ export default function DashboardPage() {
             <div className={styles.pageContent}>
                 {/* Stats */}
                 <div className={styles.statsGrid}>
-                    <Link href="/dashboard/candidates" style={{ textDecoration: 'none', color: 'inherit' }}>
+                    {role === 'ADMIN' ? (
+                        <Link href="/dashboard/candidates" style={{ textDecoration: 'none', color: 'inherit' }}>
+                            <div className={styles.statCard}>
+                                <div className={`${styles.statIcon} ${styles.statIconBlue}`}>👥</div>
+                                <div className={styles.statInfo}>
+                                    <div className={styles.statBadge + ' ' + styles.statBadgeGreen}>Growing</div>
+                                    <div className={styles.statLabel}>Total Applicants</div>
+                                    <div className={styles.statValue}>{stats.totalApplicants}</div>
+                                    <div className={styles.statMeta}>in your talent pool</div>
+                                </div>
+                            </div>
+                        </Link>
+                    ) : (
                         <div className={styles.statCard}>
                             <div className={`${styles.statIcon} ${styles.statIconBlue}`}>👥</div>
                             <div className={styles.statInfo}>
-                                <div className={styles.statBadge + ' ' + styles.statBadgeGreen}>Growing</div>
-                                <div className={styles.statLabel}>Total Applicants</div>
-                                <div className={styles.statValue}>{stats.totalApplicants}</div>
-                                <div className={styles.statMeta}>in your talent pool</div>
+                                <div className={styles.statBadge + ' ' + styles.statBadgeGreen}>Active</div>
+                                <div className={styles.statLabel}>Total Opportunities</div>
+                                <div className={styles.statValue}>{stats.openJobs}</div>
+                                <div className={styles.statMeta}>currently tracking</div>
                             </div>
                         </div>
-                    </Link>
+                    )}
 
                     <Link href="/dashboard/jobs" style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div className={styles.statCard}>
@@ -58,29 +72,21 @@ export default function DashboardPage() {
                         </div>
                     </Link>
 
-                    <Link href="/dashboard/candidates" style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <div className={styles.statCard}>
-                            <div className={`${styles.statIcon} ${styles.statIconOrange}`}>👤</div>
-                            <div className={styles.statInfo}>
-                                <div className={styles.statBadge + ' ' + styles.statBadgeOrange}>Processing</div>
-                                <div className={styles.statLabel}>Total Candidates</div>
-                                <div className={styles.statValue}>{stats.totalCandidates}</div>
-                                <div className={styles.statMeta}>in the pipeline</div>
-                            </div>
-                        </div>
-                    </Link>
-
-                    <Link href="/dashboard/candidates" style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <div className={styles.statCard}>
-                            <div className={`${styles.statIcon} ${styles.statIconPurple}`}>🤖</div>
-                            <div className={styles.statInfo}>
-                                <div className={styles.statBadge + ' ' + styles.statBadgePurple}>Tracking</div>
-                                <div className={styles.statLabel}>Total AI Interview Count</div>
-                                <div className={styles.statValue}>{stats.interviewCount}</div>
-                                <div className={styles.statMeta}>completed interviews</div>
-                            </div>
-                        </div>
-                    </Link>
+                    {role === 'ADMIN' && (
+                        <>
+                            <Link href="/dashboard/candidates" style={{ textDecoration: 'none', color: 'inherit' }}>
+                                <div className={styles.statCard}>
+                                    <div className={`${styles.statIcon} ${styles.statIconOrange}`}>👤</div>
+                                    <div className={styles.statInfo}>
+                                        <div className={styles.statBadge + ' ' + styles.statBadgeOrange}>Processing</div>
+                                        <div className={styles.statLabel}>Total Candidates</div>
+                                        <div className={styles.statValue}>{stats.totalCandidates}</div>
+                                        <div className={styles.statMeta}>in the pipeline</div>
+                                    </div>
+                                </div>
+                            </Link>
+                        </>
+                    )}
                 </div>
 
                 {/* Content Grid */}
@@ -106,34 +112,19 @@ export default function DashboardPage() {
                                 </div>
                             </div>
 
-                            <div className={styles.processStep}>
-                                <div className={`${styles.processStepIcon} ${styles.processStepIconSync}`}>
-                                    📤
-                                </div>
-                                <div className={styles.processConnector} />
-                                <div className={styles.processStepTitle}>Sync Applicants</div>
-                                <div className={styles.processStepDesc}>
-                                    Import or sync candidate data from your ATS to build your talent pool.
-                                </div>
-                                <div className={styles.processTags}>
-                                    <span className={styles.processTag}>#Pdf</span>
-                                    <span className={styles.processTag}>#Csv</span>
-                                </div>
-                            </div>
-
-                            <div className={styles.processStep}>
-                                <div className={`${styles.processStepIcon} ${styles.processStepIconInterview}`}>
-                                    🤖
-                                </div>
-                                <div className={styles.processStepTitle}>AI Interviews</div>
-                                <div className={styles.processStepDesc}>
-                                    Invite candidates to complete AI-powered interviews for initial screening.
-                                </div>
-                                <div className={styles.processTags}>
-                                    <span className={styles.processTag}>#Screening</span>
-                                    <span className={styles.processTag}>#AI</span>
-                                </div>
-                            </div>
+                             <div className={styles.processStep}>
+                                 <div className={`${styles.processStepIcon} ${styles.processStepIconSync}`}>
+                                     📤
+                                 </div>
+                                 <div className={styles.processStepTitle}>Sync Applicants</div>
+                                 <div className={styles.processStepDesc}>
+                                     Import or sync candidate data from your ATS to build your talent pool.
+                                 </div>
+                                 <div className={styles.processTags}>
+                                     <span className={styles.processTag}>#Pdf</span>
+                                     <span className={styles.processTag}>#Csv</span>
+                                 </div>
+                             </div>
                         </div>
                     </div>
 
@@ -172,45 +163,47 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Review Card */}
-                        <div className={styles.reviewCard}>
-                            <div className={styles.reviewHeader}>
-                                <div className={styles.reviewDot} style={awaitingReview.length > 0 ? { background: '#f59e0b' } : { background: '#d1d5db' }} />
-                                <h3 className={styles.reviewTitle}>
-                                    {awaitingReview.length > 0 ? `${awaitingReview.length} applicants awaiting review` : `No applicants awaiting review`}
-                                </h3>
-                            </div>
-
-                            {awaitingReview.length > 0 ? (
-                                <div className={styles.recentJobsContainer} style={{ marginTop: 12 }}>
-                                    {awaitingReview.slice(0, 3).map(c => (
-                                        <div key={c.id} className={styles.recentJobRow}>
-                                            <div className={styles.recentJobIcon} style={{ background: '#fef3e2', color: '#f59e0b' }}>👤</div>
-                                            <div className={styles.recentJobDetails}>
-                                                <div className={styles.recentJobTitle}>{c.name || c.email}</div>
-                                                <div className={styles.recentJobMeta}>
-                                                    {c.jobAssignments?.[0]?.jobTitle || 'Assigned Candidate'}
-                                                </div>
-                                            </div>
-                                            <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`} className={styles.recentJobLink} style={{ background: '#fef3e2', color: '#f59e0b' }}>
-                                                Review
-                                            </Link>
-                                        </div>
-                                    ))}
-                                    {awaitingReview.length > 3 && (
-                                        <Link href="/dashboard/candidates" style={{ display: 'block', textAlign: 'center', fontSize: '0.8rem', color: '#6b7280', marginTop: 8, textDecoration: 'none' }}>
-                                            View {awaitingReview.length - 3} more...
-                                        </Link>
-                                    )}
+                        {role === 'ADMIN' && (
+                            <div className={styles.reviewCard}>
+                                <div className={styles.reviewHeader}>
+                                    <div className={styles.reviewDot} style={awaitingReview.length > 0 ? { background: '#f59e0b' } : { background: '#d1d5db' }} />
+                                    <h3 className={styles.reviewTitle}>
+                                        {awaitingReview.length > 0 ? `${awaitingReview.length} applicants awaiting review` : `No applicants awaiting review`}
+                                    </h3>
                                 </div>
-                            ) : (
-                                <>
-                                    <div className={styles.reviewDesc}>
-                                        No new applicants to review
+
+                                {awaitingReview.length > 0 ? (
+                                    <div className={styles.recentJobsContainer} style={{ marginTop: 12 }}>
+                                        {awaitingReview.slice(0, 3).map(c => (
+                                            <div key={c.id} className={styles.recentJobRow}>
+                                                <div className={styles.recentJobIcon} style={{ background: '#fef3e2', color: '#f59e0b' }}>👤</div>
+                                                <div className={styles.recentJobDetails}>
+                                                    <div className={styles.recentJobTitle}>{c.name || c.email}</div>
+                                                    <div className={styles.recentJobMeta}>
+                                                        {c.jobAssignments?.[0]?.jobTitle || 'Assigned Candidate'}
+                                                    </div>
+                                                </div>
+                                                <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`} className={styles.recentJobLink} style={{ background: '#fef3e2', color: '#f59e0b' }}>
+                                                    Review
+                                                </Link>
+                                            </div>
+                                        ))}
+                                        {awaitingReview.length > 3 && (
+                                            <Link href="/dashboard/candidates" style={{ display: 'block', textAlign: 'center', fontSize: '0.8rem', color: '#6b7280', marginTop: 8, textDecoration: 'none' }}>
+                                                View {awaitingReview.length - 3} more...
+                                            </Link>
+                                        )}
                                     </div>
-                                    <div className={styles.reviewTime}>Updated just now</div>
-                                </>
-                            )}
-                        </div>
+                                ) : (
+                                    <>
+                                        <div className={styles.reviewDesc}>
+                                            No new applicants to review
+                                        </div>
+                                        <div className={styles.reviewTime}>Updated just now</div>
+                                    </>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

@@ -62,44 +62,54 @@ export async function POST(request) {
                         resumeMatchScore: candidate.matchScore || 0,
                     });
 
-                    const html = `
+                     const html = `
                     <!DOCTYPE html>
                     <html>
-                    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; background: #f5f5f5;">
-                        <div style="background: #ffffff; padding: 32px 24px; text-align: center; border-bottom: 1px solid #eee;">
-                            <h1 style="color: #e8604c; margin: 0; font-size: 24px;">${effectiveCompanyName}</h1>
-                            <p style="color: #000000; margin: 8px 0 0; font-size: 14px; font-weight: 500;">AI-Powered Interview Platform</p>
-                        </div>
-                        <div style="background: #fff; padding: 32px 24px;">
-                            <p style="font-size: 16px; color: #1a1a2e;">Hi ${candidate.name || 'there'},</p>
-                            <p style="font-size: 14px; color: #4b5563; line-height: 1.6;">
-                                You have been invited to take an AI-powered interview for the position of
-                                <strong style="color: #e8604c;">${jobTitle}</strong>.
-                            </p>
-                            <p style="font-size: 14px; color: #4b5563; line-height: 1.6;">
-                                This interview will be conducted by our AI interviewer and will assess your technical skills,
-                                problem-solving abilities, and domain expertise. Please ensure you are in a quiet environment
-                                with a stable internet connection.
-                            </p>
-                            <p style="font-size: 13px; color: #9ca3af; margin: 16px 0 8px;">
-                                ⏰ This invite expires in <strong>${expiryHours || 48} hours</strong>.
-                            </p>
-                            <p style="font-size: 13px; color: #9ca3af;">
-                                💡 For best experience, use <strong>Microsoft Edge</strong> or <strong>Google Chrome</strong>.
-                            </p>
-                            <div style="text-align: center; margin: 28px 0;">
-                                <a href="${inviteLink}" style="display: inline-block; background: #e8604c; color: #fff; padding: 14px 36px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
+                        <div style="background-color: #ffffff; padding: 40px 30px; border-radius: 16px; border: 1px solid #e8e8ef; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                            <div style="text-align: center; margin-bottom: 32px;">
+                                <h1 style="color: #e8604c; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em;">Hyper<span style="color: #1a1a2e;">Eval</span></h1>
+                                <p style="color: #64748b; margin: 4px 0 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">AI-Powered Interview Platform</p>
+                            </div>
+                            
+                            <div style="margin-bottom: 32px;">
+                                <p style="font-size: 18px; color: #1a1a2e; font-weight: 700; margin-bottom: 16px;">Hi ${candidate.name || 'there'},</p>
+                                <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 16px;">
+                                    You have been invited to an AI-powered technical interview for the position of
+                                    <strong style="color: #e8604c;">${jobTitle}</strong> at <strong>${effectiveCompanyName}</strong>.
+                                </p>
+                                <div style="background-color: #f8fafc; border-radius: 12px; padding: 20px; border: 1px solid #f1f5f9; margin-bottom: 24px;">
+                                    <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0;">
+                                        This interview is conducted by our AI assistant. It will evaluate your technical depth, domain knowledge, and problem-solving skills in real-time.
+                                    </p>
+                                </div>
+                                <div style="display: flex; gap: 20px; margin-bottom: 32px;">
+                                    <p style="font-size: 13px; color: #64748b; margin: 0;">
+                                        ⏰ Invitation expires in: <strong>${expiryHours || 48} hours</strong>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div style="text-align: center; margin-bottom: 32px;">
+                                <a href="${inviteLink}" style="display: inline-block; background: linear-gradient(135deg, #e8604c, #f0845e); color: #ffffff; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 16px; box-shadow: 0 10px 20px rgba(232, 96, 76, 0.2);">
                                     Accept & Start Interview →
                                 </a>
                             </div>
-                            <p style="font-size: 12px; color: #b0b0bf; text-align: center;">
-                                If the button doesn't work, copy this link:<br/>
-                                <a href="${inviteLink}" style="color: #e8604c; word-break: break-all;">${inviteLink}</a>
-                            </p>
+
+                            <div style="border-top: 1px solid #f1f5f9; padding-top: 24px; text-align: center;">
+                                <p style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+                                    For the best experience, please use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong>.<br/>
+                                    Ensure you have a stable internet connection and a working camera/microphone.
+                                </p>
+                                <p style="font-size: 12px; color: #cbd5e1; margin-top: 16px;">
+                                    If the button doesn't work, copy this link:<br/>
+                                    <a href="${inviteLink}" style="color: #e8604c; text-decoration: underline;">${inviteLink}</a>
+                                </p>
+                            </div>
                         </div>
-                        <div style="background: #f8f9fa; padding: 20px 24px; text-align: center;">
-                            <p style="font-size: 12px; color: #9ca3af; margin: 0;">
-                                Powered by ${effectiveCompanyName} • AI-Driven Hiring Platform
+                        <div style="text-align: center; margin-top: 24px;">
+                            <p style="font-size: 12px; color: #94a3b8;">
+                                Powered by ${effectiveCompanyName} • The Future of Intelligent Hiring
                             </p>
                         </div>
                     </body>

@@ -10,7 +10,6 @@ const navItems = [
     { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
     { href: '/dashboard/candidates', icon: '👥', label: 'Candidates' },
     { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
-    { href: '/setup', icon: '🤖', label: 'AI Interviews', external: true },
 ];
 
 import { useDashboard } from '@/context/DashboardContext';
@@ -28,7 +27,7 @@ function Sidebar() {
 
     const filteredNavItems = navItems.filter(item => {
         if (role === 'CLIENT') {
-            return !['/dashboard/settings', '/setup'].includes(item.href);
+            return !['/dashboard/settings', '/setup', '/dashboard/candidates'].includes(item.href);
         }
         return true;
     });

@@ -301,6 +301,12 @@ export default function CandidatesPage() {
                     n.delete(candidate.id);
                     return n;
                 });
+                // Clear from local interview state so AI badge updates
+                setCandidateInterviews(prev => {
+                    const next = { ...prev };
+                    delete next[candidate.email];
+                    return next;
+                });
             } else {
                 showToast(`⚠ Failed to remove all records for ${candidate.email}`);
             }
@@ -314,6 +320,23 @@ export default function CandidatesPage() {
     const generateQuestionsForPreview = async () => {
         const job = state.jobs.find(j => j.id === inviteJobId);
         if (!job) return;
+
+        // Check if any candidate has already been invited to this job with custom questions
+        let existingQuestions = null;
+        for (const c of state.candidates) {
+            const assignment = c.jobAssignments?.find(a => a.jobId === inviteJobId);
+            if (assignment && assignment.customQuestions && assignment.customQuestions.length > 0) {
+                existingQuestions = assignment.customQuestions;
+                break;
+            }
+        }
+
+        if (existingQuestions) {
+            setPreviewQuestions(existingQuestions);
+            showToast('✓ Loaded saved AI questions for this job.');
+            return;
+        }
+
         setIsGeneratingQuestions(true);
         try {
             const { generateInterviewQuestions } = await import('@/lib/groqService');
@@ -382,8 +405,10 @@ export default function CandidatesPage() {
         if (!job) return;
 
         const selectedCandidates = state.candidates.filter(c => selectedIds.has(c.id));
-        setInviteStep(5);
-        setSendProgress({ sent: 0, total: selectedCandidates.length, done: false });
+
+        // Optimistically close modal and show toast immediately
+        closeInviteModal();
+        showToast(`✓ Invites are being sent in the background for ${selectedCandidates.length} candidate(s)...`);
 
         // First assign all selected candidates to this job
         dispatch({
@@ -391,51 +416,42 @@ export default function CandidatesPage() {
             payload: { candidateIds: Array.from(selectedIds), jobId: job.id, jobTitle: job.title },
         });
 
+        // Optimistically update status
+        for (const c of selectedCandidates) {
+            dispatch({ type: 'UPDATE_CANDIDATE_JOB_STATUS', payload: { candidateId: c.id, jobId: job.id, status: 'invited' } });
+        }
+
         // Use preview questions (with expected answers) for the invite
         const questionsPayload = previewQuestions.map(q => ({
             question: q.question,
             expectedAnswer: q.expectedAnswer || '',
         }));
 
-        try {
-            const res = await fetch('/api/send-invite', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    candidates: selectedCandidates.map(c => ({ email: c.email, name: c.name })),
-                    jobTitle: job.title,
-                    jobId: job.id,
-                    jobDescription: job.description || '',
-                    companyName: state.user?.companyName || 'HyperEval',
-                    expiryHours: inviteExpiryHours,
-                    customQuestions: questionsPayload,
-                    questionCount: previewQuestions.length,
-                }),
-            });
-
-            const data = await res.json();
-
+        // Fire off background request without await
+        fetch('/api/send-invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                candidates: selectedCandidates.map(c => ({ email: c.email, name: c.name })),
+                jobTitle: job.title,
+                jobId: job.id,
+                jobDescription: job.description || '',
+                companyName: state.user?.companyName || 'HyperEval',
+                expiryHours: inviteExpiryHours,
+                customQuestions: questionsPayload,
+                questionCount: previewQuestions.length,
+            }),
+        }).then(res => res.json()).then(data => {
             if (data.success) {
                 const successEmails = data.results.filter(r => r.success).map(r => r.email);
                 const successCandidateIds = state.candidates.filter(c => successEmails.includes(c.email)).map(c => c.id);
-
-                // Update status for successfully invited candidates
-                for (const cId of successCandidateIds) {
-                    dispatch({ type: 'UPDATE_CANDIDATE_JOB_STATUS', payload: { candidateId: cId, jobId: job.id, status: 'invited' } });
-                }
-
                 // Trigger auto-matching for successfully invited candidates
                 matchCandidatesWithJob(new Set(successCandidateIds), job.id);
-
-                showToast(`✓ ${data.message}`);
+                console.log(`✓ ${data.message}`);
             } else {
-                setSendProgress(prev => ({ ...prev, done: true }));
-                showToast(`⚠ ${data.error || 'Failed to send invites'}`);
+                console.error(`⚠ ${data.error || 'Failed to send invites'}`);
             }
-        } catch (err) {
-            setSendProgress(prev => ({ ...prev, done: true }));
-            showToast(`⚠ Error: ${err.message}`);
-        }
+        }).catch(err => console.error('Error sending invites:', err));
     };
 
     const closeInviteModal = () => {
@@ -630,7 +646,8 @@ export default function CandidatesPage() {
                             </tr>
                         ) : (
                             filteredCandidates.map(c => {
-                                const displayStatus = getCandidateDisplayStatus(c);
+                                const displayStatusObj = getCandidateDisplayStatus(c);
+                                const displayStatus = displayStatusObj?.status;
                                 return (
                                     <tr key={c.id} className={styles.tableRow}>
                                         <td className={styles.tdCheck}>
@@ -719,10 +736,12 @@ export default function CandidatesPage() {
                                         <td className={styles.tdSource}>{c.source || '—'}</td>
                                         <td className={styles.tdDate}>{new Date(c.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</td>
                                         <td className={styles.tdActions}>
-                                            <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`}
-                                                className={styles.analyticsBtn} title="View Interview Analytics">
-                                                📊 Analytics
-                                            </Link>
+                                            {(displayStatus === 'completed' || displayStatus === 'interviewed' || displayStatus === 'accepted' || displayStatus === 'rejected') && (
+                                                <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`}
+                                                    className={styles.analyticsBtn} title="View Interview Analytics">
+                                                    📊 Analytics
+                                                </Link>
+                                            )}
                                             <button className={styles.editActionBtn} onClick={() => {
                                                 setEditingCandidate({ ...c });
                                                 setShowEditModal(true);
@@ -814,7 +833,14 @@ export default function CandidatesPage() {
                             {/* STEP 3: Custom Questions (with expected answers) */}
                             {inviteStep === 3 && (
                                 <div className={styles.stepContent}>
-                                    <p className={styles.stepDesc}>Add optional custom questions with expected answers (for grading):</p>
+                                    <div style={{ marginBottom: 16, lineHeight: 1.5 }}>
+                                        <p className={styles.stepDesc} style={{ marginBottom: 4 }}>
+                                            Add custom questions with optional expected answers:
+                                        </p>
+                                        <p style={{ fontSize: '0.8rem', color: '#e8604c', fontWeight: 600 }}>
+                                            ⚠️ Warning: If no expected answer is provided, the custom question will not be graded.
+                                        </p>
+                                    </div>
                                     {inviteQuestions.map((q, i) => (
                                         <div key={i} style={{ marginBottom: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '12px 14px' }}>
                                             <div className={styles.questionRow}>

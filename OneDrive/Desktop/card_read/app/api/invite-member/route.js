@@ -135,36 +135,43 @@ export async function POST(req) {
             to: email,
             subject: `Invitation to join ${companyName} on HyperEval`,
             html: `
-                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #ffffff;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #000; margin-bottom: 10px;">Hyper<span style="color: #6366f1;">Eval</span></h1>
-                        <p style="color: #666; font-size: 16px;">AI-Powered Hiring Excellence</p>
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
+                    <div style="background-color: #ffffff; padding: 40px 30px; border-radius: 16px; border: 1px solid #e8e8ef; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                        <div style="text-align: center; margin-bottom: 32px;">
+                            <h1 style="color: #e8604c; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em;">Hyper<span style="color: #1a1a2e;">Eval</span></h1>
+                            <p style="color: #64748b; margin: 4px 0 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">AI-Powered Hiring Excellence</p>
+                        </div>
+                        
+                        <div style="background-color: #f8fafc; padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #f1f5f9;">
+                            <h2 style="margin-top: 0; color: #1a1a2e; font-size: 20px; font-weight: 800;">You've been invited!</h2>
+                            <p style="color: #334155; line-height: 1.6; font-size: 15px;">
+                                Hello ${name || ''}, you have been invited to join <strong>${companyName}</strong> as a <strong>${role.replace('_', ' ')}</strong> on HyperEval.
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom: 30px;">
+                            <h3 style="color: #1a1a2e; font-size: 16px; margin-bottom: 15px; font-weight: 700;">Your Temporary Credentials:</h3>
+                            <div style="background: #ffffff; border: 1px solid #e8e8ef; border-radius: 10px; overflow: hidden;">
+                                <div style="padding: 14px; background-color: #f8fafc; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
+                                    <span style="color: #64748b; font-size: 13px; font-weight: 600;">Email:</span>
+                                    <span style="color: #1a1a2e; font-size: 13px; font-weight: 700;">${email}</span>
+                                </div>
+                                <div style="padding: 14px; display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: #64748b; font-size: 13px; font-weight: 600;">Password:</span>
+                                    <span style="color: #e8604c; font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 18px;">${password}</span>
+                                </div>
+                            </div>
+                            <p style="font-size: 12px; color: #94a3b8; margin-top: 12px; font-style: italic;">Please change your password after your first login.</p>
+                        </div>
+
+                        <div style="text-align: center; margin-top: 40px;">
+                            <a href="${loginUrl}" style="background: linear-gradient(135deg, #e8604c, #f0845e); color: #fff; padding: 16px 40px; text-decoration: none; border-radius: 12px; font-weight: 700; display: inline-block; font-size: 16px; box-shadow: 0 10px 20px rgba(232, 96, 76, 0.2);">Login to Dashboard</a>
+                        </div>
                     </div>
-                    
-                    <div style="background-color: #f9fafb; padding: 25px; border-radius: 10px; margin-bottom: 25px;">
-                        <h2 style="margin-top: 0; color: #111; font-size: 20px;">You've been invited!</h2>
-                        <p style="color: #444; line-height: 1.6;">
-                            Hello ${name || ''}, you have been invited to join <strong>${companyName}</strong> as a <strong>${role.replace('_', ' ')}</strong> on HyperEval.
+                    <div style="text-align: center; margin-top: 24px;">
+                        <p style="font-size: 12px; color: #94a3b8;">
+                            Powered by HyperEval • The Future of Intelligent Hiring
                         </p>
-                    </div>
-
-                    <div style="margin-bottom: 30px;">
-                        <h3 style="color: #111; font-size: 16px; margin-bottom: 15px;">Your Temporary Credentials:</h3>
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <tr>
-                                <td style="padding: 10px; background-color: #f3f4f6; border-radius: 6px 0 0 6px; color: #666; width: 100px;">Username:</td>
-                                <td style="padding: 10px; background-color: #f3f4f6; border-radius: 0 6px 6px 0; font-weight: 600; color: #111;">${email}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 10px; color: #666;">Password:</td>
-                                <td style="padding: 10px; font-family: monospace; font-weight: 600; color: #4f46e5; font-size: 18px;">${password}</td>
-                            </tr>
-                        </table>
-                        <p style="font-size: 13px; color: #999; margin-top: 10px;">Please change your password after your first login.</p>
-                    </div>
-
-                    <div style="text-align: center; margin-top: 40px; margin-bottom: 40px;">
-                        <a href="${loginUrl}" style="background-color: #000; color: #fff; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: 700; display: inline-block;">Login to Dashboard</a>
                     </div>
                 </div>
             `,

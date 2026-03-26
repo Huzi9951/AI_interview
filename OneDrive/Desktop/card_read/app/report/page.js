@@ -1,25 +1,63 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import styles from './page.module.css';
 
-export default function ReportPage() {
+function ReportContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [reportData, setReportData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const data = sessionStorage.getItem('hypereval_report');
-        if (!data) {
+        async function loadReport() {
+            // 1. Try sessionStorage first (just-completed interview)
+            const data = sessionStorage.getItem('hypereval_report');
+            if (data) {
+                const parsed = JSON.parse(data);
+                setReportData(parsed);
+                setIsLoading(false);
+                return;
+            }
+
+            // 2. Try loading from DB via query param
+            const interviewId = searchParams.get('id');
+            if (interviewId) {
+                try {
+                    const res = await fetch(`/api/interviews/${interviewId}`);
+                    const result = await res.json();
+                    if (result.success && result.interview) {
+                        const iv = result.interview;
+                        const report = iv.report_data || {};
+                        const formattedData = {
+                            finalReport: report,
+                            questions: (iv.questions || []).map(q => q.question || q),
+                            answers: (iv.questions || []).map(q => q.answer || '[No response]'),
+                            evaluations: (iv.questions || []).map(q => q.evaluation || {}),
+                            violations: iv.violations || [],
+                            codingEvaluation: report.codingEvaluation || null,
+                            skillAnalysis: iv.skill_analysis || {},
+                            questionTimestamps: report.questionTimestamps || (iv.questions || []).map(q => q.timestamp || {}),
+                            recordingUrl: iv.recording_url || null,
+                            jobDescription: iv.job_title || '',
+                            resumeFileName: '',
+                        };
+                        setReportData(formattedData);
+                        setIsLoading(false);
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Failed to load report from DB:', err);
+                }
+            }
+
+            // 3. No data found — redirect to setup
             router.push('/setup');
-            return;
         }
-        const parsed = JSON.parse(data);
-        setReportData(parsed);
-        setIsLoading(false);
-    }, [router]);
+        loadReport();
+    }, [router, searchParams]);
 
     if (isLoading || !reportData) {
         return (
@@ -341,5 +379,18 @@ export default function ReportPage() {
                 )}
             </main>
         </div>
+    );
+}
+
+export default function ReportPage() {
+    return (
+        <Suspense fallback={
+            <div className={styles.loadingOverlay}>
+                <div className={styles.spinner} />
+                <div className={styles.loadingText}>Loading report...</div>
+            </div>
+        }>
+            <ReportContent />
+        </Suspense>
     );
 }

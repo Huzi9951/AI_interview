@@ -6,6 +6,33 @@ import { supabase, adminSupabase } from './supabaseClient';
 
 /** Create a new pending interview record */
 export async function createInterview({ candidateEmail, candidateName, jobTitle, jobId, tokenHash, customQuestions, resumeText, resumeMatchScore }) {
+    if (typeof window !== 'undefined') {
+        const res = await fetch('/api/interviews', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                interviews: [{
+                    candidateEmail,
+                    candidateName,
+                    jobTitle,
+                    jobId,
+                    tokenHash,
+                    customQuestions: customQuestions || [],
+                    status: 'pending'
+                }]
+            })
+        });
+        const data = await res.json();
+        // The API returns { success, count, results } or similar
+        // We'll need to fetch the created record or let the batch insert return it
+        // For simplicity here, we'll try to find it again or assume success
+        if (data.success) {
+             // Re-fetch by token to get the ID if needed, or if API returns it
+             return { id: data.ids?.[0] }; // We might need to update the API to return IDs
+        }
+        return null;
+    }
+
     if (!adminSupabase) return null;
     const { data, error } = await adminSupabase
         .from('interviews')
@@ -16,6 +43,8 @@ export async function createInterview({ candidateEmail, candidateName, jobTitle,
             job_id: jobId,
             token_hash: tokenHash,
             custom_questions: customQuestions || [],
+            resume_text: resumeText || '',
+            resume_match_score: resumeMatchScore || 0,
             status: 'pending'
         })
         .select()
@@ -34,7 +63,11 @@ export async function createInterviewsBatch(interviews) {
             candidate_name: i.candidateName,
             job_title: i.jobTitle,
             job_id: i.jobId,
-            status: i.status || 'assigned'
+            token_hash: i.tokenHash || null,
+            status: i.status || 'assigned',
+            custom_questions: i.customQuestions || [],
+            resume_text: i.resumeText || '',
+            resume_match_score: i.resumeMatchScore || 0,
         })), { onConflict: 'candidate_email,job_id' })
         .select();
     if (error) { console.error('createInterviewsBatch error:', error); return null; }
@@ -66,18 +99,39 @@ export async function hasCompletedInterview(tokenHash) {
     return data && data.length > 0;
 }
 
-/** Get interview by token hash */
-export async function getInterviewByToken(tokenHash) {
-    if (!supabase || !tokenHash) return null;
+/** Get interview by ID */
+export async function getInterviewById(id) {
+    if (!supabase || !id) return null;
     const { data, error } = await supabase
         .from('interviews')
         .select('*')
-        .eq('token_hash', tokenHash)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .eq('id', id)
         .single();
-    if (error) { console.error('getInterviewByToken error:', error); return null; }
+    if (error) { console.error('getInterviewById error:', error); return null; }
     return data;
+}
+
+/** Get interview by token hash */
+export async function getInterviewByToken(tokenHash) {
+    if (!supabase || !tokenHash) return null;
+    try {
+        const { data, error } = await supabase
+            .from('interviews')
+            .select('*')
+            .eq('token_hash', tokenHash)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(); // maybeSingle() returns null instead of throwing error if zero rows found
+            
+        if (error) {
+            console.error('getInterviewByToken database error:', error.message || JSON.stringify(error));
+            return null;
+        }
+        return data;
+    } catch (err) {
+        console.error('getInterviewByToken exception:', err.message);
+        return null;
+    }
 }
 
 /** Update interview status and optionally other fields */
@@ -145,6 +199,16 @@ export async function updateInterviewStatusByEmail(email, jobId, status, extra =
 
 /** Mark interview as in-progress */
 export async function startInterviewRecord(interviewId) {
+    if (typeof window !== 'undefined') {
+        const res = await fetch(`/api/interviews/${interviewId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'in_progress', started_at: new Date().toISOString() })
+        });
+        const data = await res.json();
+        return data.interview;
+    }
+
     if (!supabase) return null;
     const { data, error } = await supabase
         .from('interviews')
@@ -160,20 +224,32 @@ export async function startInterviewRecord(interviewId) {
 export async function completeInterview(interviewId, {
     questions, violations, reportData, overallScore, hireRecommendation, recordingUrl, skillAnalysis
 }) {
+    const payload = {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        questions: questions || [],
+        violations: violations || [],
+        report_data: reportData || {},
+        overall_score: overallScore || 0,
+        hire_recommendation: hireRecommendation || '',
+        recording_url: recordingUrl || null,
+        skill_analysis: skillAnalysis || {},
+    };
+
+    if (typeof window !== 'undefined') {
+        const res = await fetch(`/api/interviews/${interviewId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        return data.interview;
+    }
+
     if (!supabase) return null;
     const { data, error } = await supabase
         .from('interviews')
-        .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            questions: questions || [],
-            violations: violations || [],
-            report_data: reportData || {},
-            overall_score: overallScore || 0,
-            hire_recommendation: hireRecommendation || '',
-            recording_url: recordingUrl || null,
-            skill_analysis: skillAnalysis || {},
-        })
+        .update(payload)
         .eq('id', interviewId)
         .select()
         .single();
@@ -308,17 +384,7 @@ export async function getInterviewsByEmail(email) {
     return data || [];
 }
 
-/** Get a single interview by ID */
-export async function getInterviewById(id) {
-    if (!supabase || !id) return null;
-    const { data, error } = await supabase
-        .from('interviews')
-        .select('*')
-        .eq('id', id)
-        .single();
-    if (error) { console.error('getInterviewById error:', error); return null; }
-    return data;
-}
+
 
 /** Get all interviews (for syncing dashboard status) */
 export async function fetchAllInterviewsFromDB() {
@@ -326,7 +392,7 @@ export async function fetchAllInterviewsFromDB() {
     try {
         const { data, error } = await supabase
             .from('interviews')
-            .select('id, candidate_email, candidate_name, job_title, job_id, overall_score, status, started_at, completed_at, recording_url, created_at')
+            .select('*')
             .order('created_at', { ascending: false });
         if (error) { console.error('fetchAllInterviewsFromDB error:', error); return []; }
         return data || [];

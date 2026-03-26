@@ -7,131 +7,6 @@ const DashboardContext = createContext(null);
 const STORAGE_KEY = 'hypereval_dashboard';
 const USER_STORAGE_KEY = 'hypereval_user';
 
-const sampleJobs = [
-    {
-        id: '1',
-        title: 'AWS Cloud & DevOps SRE Engineer',
-        locationType: 'In Office',
-        location: 'Dubai',
-        experienceLevel: 'Senior',
-        experienceRange: '8-16 years',
-        employmentType: 'Full-Time',
-        department: 'Engineering',
-        status: 'open',
-        createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
-        applicantCount: 9,
-        description: 'We are looking for a Senior AWS Cloud & DevOps SRE Engineer to join our team in Dubai. The ideal candidate will have expertise in AWS services, CI/CD pipelines, infrastructure as code, and site reliability engineering.',
-        skills: ['AWS', 'DevOps', 'Kubernetes', 'Terraform', 'CI/CD', 'Docker'],
-        mustHave: ['8+ years of experience in cloud infrastructure', 'Bachelor\'s degree in Computer Science or related field', 'Strong expertise in AWS services (EC2, S3, Lambda, RDS)'],
-        preferred: ['Kubernetes certification', 'Experience with multi-cloud environments'],
-        salaryMin: 120000,
-        salaryMax: 180000,
-        currency: 'USD',
-        requirements: 'Bachelor\'s degree in Computer Science or related field. 8+ years of experience in cloud infrastructure and DevOps.',
-        responsibilities: 'Design and maintain cloud infrastructure on AWS. Implement CI/CD pipelines. Ensure system reliability and scalability.',
-    },
-    {
-        id: '2',
-        title: 'Oracle Technical & Functional Specialist (HRMS EBS)',
-        locationType: 'In Office',
-        location: 'Bangalore',
-        experienceLevel: 'Senior',
-        experienceRange: '8-15 years',
-        employmentType: 'Full-Time',
-        department: 'IT',
-        status: 'closed',
-        createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
-        applicantCount: 2,
-        description: 'Oracle HRMS EBS specialist needed for implementation and support projects.',
-        skills: ['Oracle EBS', 'HRMS', 'PL/SQL', 'Oracle Forms'],
-        salaryMin: 100000,
-        salaryMax: 150000,
-        currency: 'USD',
-        requirements: '8+ years experience with Oracle EBS HRMS modules.',
-        responsibilities: 'Configure and customize Oracle HRMS modules. Provide technical support.',
-    },
-    {
-        id: '3',
-        title: 'Oracle Specialist (Procurement EBS)',
-        locationType: 'In Office',
-        location: 'Bangalore',
-        experienceLevel: 'Mid-Level',
-        experienceRange: '5-10 years',
-        employmentType: 'Full-Time',
-        department: 'IT',
-        status: 'closed',
-        createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
-        applicantCount: 2,
-        description: 'Oracle Procurement EBS specialist for supply chain management projects.',
-        skills: ['Oracle EBS', 'Procurement', 'PL/SQL', 'Supply Chain'],
-        salaryMin: 90000,
-        salaryMax: 130000,
-        currency: 'USD',
-        requirements: '5+ years experience with Oracle EBS Procurement modules.',
-        responsibilities: 'Manage and configure Oracle Procurement modules.',
-    },
-    {
-        id: '4',
-        title: 'Solution Consultant – IoT & AI',
-        locationType: 'In Office',
-        location: 'Bangalore',
-        experienceLevel: 'Junior',
-        experienceRange: '0-2 years',
-        employmentType: 'Full-Time',
-        department: 'Business Development',
-        status: 'closed',
-        createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
-        applicantCount: 18,
-        description: 'Looking for a Solution Consultant to work on IoT and AI projects.',
-        skills: ['IoT', 'AI', 'Machine Learning', 'Python', 'Solutions Architecture'],
-        salaryMin: 60000,
-        salaryMax: 90000,
-        currency: 'USD',
-        requirements: '0-2 years of experience in IoT or AI domains.',
-        responsibilities: 'Assist in designing IoT and AI solutions for clients.',
-    },
-    {
-        id: '5',
-        title: 'Talent Acquisition Specialist (IT Niche Hiring)',
-        locationType: 'In Office',
-        location: 'Bangalore, Karnataka, India',
-        experienceLevel: 'Mid-Level',
-        experienceRange: '3-6 years',
-        employmentType: 'Full-Time',
-        department: 'Human Resources',
-        status: 'closed',
-        createdAt: new Date(Date.now() - 90 * 86400000).toISOString(),
-        applicantCount: 5,
-        description: 'IT niche hiring specialist for technical recruitment.',
-        skills: ['Technical Recruiting', 'IT Hiring', 'ATS', 'Sourcing'],
-        salaryMin: 50000,
-        salaryMax: 80000,
-        currency: 'USD',
-        requirements: '3-6 years of experience in IT recruitment.',
-        responsibilities: 'Source and recruit IT professionals for niche roles.',
-    },
-];
-
-function loadFromStorage() {
-    if (typeof window === 'undefined') return null;
-    try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : null;
-    } catch {
-        return null;
-    }
-}
-
-const getInitialState = () => {
-    const stored = loadFromStorage();
-    if (stored) return stored;
-    return {
-        jobs: sampleJobs,
-        candidates: [],
-        interviewCount: 20,
-    };
-};
-
 const initialState = {
     jobs: [],
     candidates: [],
@@ -194,8 +69,8 @@ function dashboardReducer(state, action) {
 
         case 'TOGGLE_JOB_STATUS': {
             const jobs = state.jobs.map(j =>
-                j.id === action.payload
-                    ? { ...j, status: j.status === 'open' ? 'closed' : 'open' }
+                j.id === action.payload.id
+                    ? { ...j, status: action.payload.newStatus }
                     : j
             );
             return { ...state, jobs };
@@ -389,10 +264,7 @@ export function DashboardProvider({ children }) {
                 console.warn('Auth check failed:', authErr);
             }
 
-            // 1. Try LocalStorage for dashboard data
-            const localData = getInitialState();
-            
-            // 2. Try Supabase sync
+            // Sync from Supabase (DB-first, no sample data fallback)
             try {
                 const { getAllCandidates, getAllJobs, fetchAllInterviewsFromDB } = await import('@/lib/db');
                 const [dbCandidates, dbJobs, dbAllInterviews] = await Promise.all([
@@ -401,80 +273,83 @@ export function DashboardProvider({ children }) {
                     fetchAllInterviewsFromDB()
                 ]);
 
-                if (dbCandidates.length > 0 || dbJobs.length > 0) {
-                    let formattedJobs = dbJobs.length > 0 ? dbJobs.map(j => ({
-                        id: j.id,
-                        title: j.title,
-                        description: j.description,
-                        skills: j.skills || [],
-                        locationType: j.location_type || '',
-                        location: j.location || '',
-                        experienceLevel: j.experience_level || '',
-                        experienceRange: j.experience_range || '',
-                        employmentType: j.employment_type || '',
-                        department: j.department || '',
-                        mustHave: j.must_have || [],
-                        preferred: j.preferred || [],
-                        salaryMin: j.salary_min || null,
-                        salaryMax: j.salary_max || null,
-                        currency: j.currency || 'USD',
-                        applicantCount: 0,
-                        status: j.status,
-                        createdAt: j.created_at
-                    })) : [];
+                let formattedJobs = dbJobs.map(j => ({
+                    id: j.id,
+                    title: j.title,
+                    description: j.description,
+                    skills: j.skills || [],
+                    locationType: j.location_type || '',
+                    location: j.location || '',
+                    experienceLevel: j.experience_level || '',
+                    experienceRange: j.experience_range || '',
+                    employmentType: j.employment_type || '',
+                    department: j.department || '',
+                    mustHave: j.must_have || [],
+                    preferred: j.preferred || [],
+                    salaryMin: j.salary_min || null,
+                    salaryMax: j.salary_max || null,
+                    currency: j.currency || 'USD',
+                    requirements: j.requirements || '',
+                    responsibilities: j.responsibilities || '',
+                    applicantCount: 0,
+                    status: j.status,
+                    createdAt: j.created_at
+                }));
 
-                    let formattedCandidates = dbCandidates.map(c => {
-                        const assignments = dbAllInterviews
-                            .filter(i => i.candidate_email === c.email)
-                            .map(i => ({
-                                jobId: i.job_id,
-                                jobTitle: i.job_title,
-                                status: i.status,
-                                score: i.overall_score,
-                                matchScore: i.resume_match_score || null,
-                                analysis: i.skill_analysis || null, // Map skill_analysis from DB
-                                assignedAt: i.created_at
-                            }));
+                let formattedCandidates = dbCandidates.map(c => {
+                    const assignments = dbAllInterviews
+                        .filter(i => i.candidate_email === c.email)
+                        .map(i => ({
+                            jobId: i.job_id,
+                            jobTitle: i.job_title,
+                            status: i.status,
+                            score: i.overall_score,
+                            matchScore: i.resume_match_score || null,
+                            analysis: i.skill_analysis || null,
+                            customQuestions: i.custom_questions || [],
+                            hireRecommendation: i.hire_recommendation || '',
+                            recordingUrl: i.recording_url || null,
+                            completedAt: i.completed_at || null,
+                            startedAt: i.started_at || null,
+                            assignedAt: i.created_at
+                        }));
 
-                        return {
-                            id: c.id,
-                            name: c.name,
-                            email: c.email,
-                            phone: c.phone || '',
-                            designation: c.designation || '',
-                            company: c.company || '',
-                            resumeText: c.resume_text || '',
-                            addedAt: c.added_at,
-                            jobAssignments: assignments
-                        };
-                    });
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        email: c.email,
+                        phone: c.phone || '',
+                        designation: c.designation || '',
+                        company: c.company || '',
+                        resumeText: c.resume_text || '',
+                        source: c.source || '',
+                        addedAt: c.added_at,
+                        jobAssignments: assignments
+                    };
+                });
 
-                    // ROLE-BASED FILTERING
-                    if (currentUser.role === 'CLIENT') {
-                        const assignedIds = new Set(currentUser.assigned_jobs || []);
-                        formattedJobs = formattedJobs.filter(j => assignedIds.has(j.id));
-                        formattedCandidates = formattedCandidates.filter(c => 
-                            c.jobAssignments && c.jobAssignments.some(a => assignedIds.has(a.jobId))
-                        );
-                    }
-
-                    dispatch({
-                        type: 'INIT',
-                        payload: {
-                            jobs: formattedJobs,
-                            candidates: formattedCandidates,
-                            interviewCount: dbAllInterviews.filter(i => i.status === 'completed').length,
-                            user: currentUser,
-                        }
-                    });
-                    console.log(`Dashboard synced with Supabase (${currentUser.role} mode)`);
-                } else {
-                    // Fallback to sample/local
-                    dispatch({ type: 'INIT', payload: { ...(localData || getInitialState()), user: currentUser } });
+                // ROLE-BASED FILTERING
+                if (currentUser.role === 'CLIENT') {
+                    const assignedIds = new Set(currentUser.assigned_jobs || []);
+                    formattedJobs = formattedJobs.filter(j => assignedIds.has(j.id));
+                    formattedCandidates = formattedCandidates.filter(c => 
+                        c.jobAssignments && c.jobAssignments.some(a => assignedIds.has(a.jobId))
+                    );
                 }
+
+                dispatch({
+                    type: 'INIT',
+                    payload: {
+                        jobs: formattedJobs,
+                        candidates: formattedCandidates,
+                        interviewCount: dbAllInterviews.filter(i => i.status === 'completed').length,
+                        user: currentUser,
+                    }
+                });
+                console.log(`Dashboard synced with Supabase (${currentUser.role} mode)`);
             } catch (err) {
-                console.warn('Dashboard sync with Supabase failed:', err);
-                dispatch({ type: 'INIT', payload: { ...(localData || getInitialState()), user: currentUser } });
+                console.warn('Dashboard sync with Supabase failed, starting with empty state:', err);
+                dispatch({ type: 'INIT', payload: { jobs: [], candidates: [], interviewCount: 0, user: currentUser } });
             } finally {
                 dispatch({ type: 'SET_LOADING', payload: false });
             }
@@ -621,10 +496,20 @@ export function DashboardProvider({ children }) {
             });
             const data = await res.json();
             if (data.success) {
-                // Use the candidates returned from API (with real UUIDs)
-                const apiCandidates = data.candidates || candidatesArray;
-                dispatch({ type: 'ADD_CANDIDATES', payload: apiCandidates });
-                return apiCandidates;
+                // Map API (snake_case) response back to camelCase for local state
+                const apiCandidates = (data.candidates || []).map(c => ({
+                    id: c.id,
+                    name: c.name || '',
+                    email: c.email,
+                    phone: c.phone || '',
+                    designation: c.designation || '',
+                    company: c.company || '',
+                    resumeText: c.resume_text || '',
+                    source: c.source || '',
+                    addedAt: c.added_at || new Date().toISOString(),
+                }));
+                dispatch({ type: 'ADD_CANDIDATES', payload: apiCandidates.length > 0 ? apiCandidates : candidatesArray });
+                return apiCandidates.length > 0 ? apiCandidates : candidatesArray;
             }
         } catch (err) {
             console.error('Persistent addCandidates failed:', err);
@@ -655,9 +540,11 @@ export function DashboardProvider({ children }) {
     };
 
     const assignToJob = async (idSet, jobId, jobTitle) => {
-        try {
-            const candidatesToAssign = state.candidates.filter(c => idSet.has(c.id));
+        // Capture candidates and job BEFORE async operations to avoid stale closures
+        const candidatesToAssign = state.candidates.filter(c => idSet.has(c.id));
+        const job = state.jobs.find(j => j.id === jobId);
 
+        try {
             // Create new "assigned" status records in Supabase via API
             const inviteData = candidatesToAssign.map(c => ({
                 candidateEmail: c.email,
@@ -681,8 +568,8 @@ export function DashboardProvider({ children }) {
                     payload: { candidateIds: Array.from(idSet), jobId, jobTitle }
                 });
                 
-                // Trigger auto-matching for these candidates
-                matchCandidatesWithJob(idSet, jobId);
+                // Trigger auto-matching with captured data (not stale state)
+                matchCandidatesWithJob(candidatesToAssign, job);
                 
                 return true;
             }
@@ -696,11 +583,21 @@ export function DashboardProvider({ children }) {
         });
     };
 
-    const matchCandidatesWithJob = async (idSet, jobId) => {
-        const job = state.jobs.find(j => j.id === jobId);
-        if (!job) return;
+    const matchCandidatesWithJob = async (candidatesOrIdSet, jobOrJobId) => {
+        // Accept either direct data or legacy (idSet, jobId) format
+        let job, candidatesToMatch;
+        if (jobOrJobId && typeof jobOrJobId === 'object' && jobOrJobId.id) {
+            // New format: (candidatesArray, jobObject)
+            job = jobOrJobId;
+            candidatesToMatch = Array.isArray(candidatesOrIdSet) ? candidatesOrIdSet : [];
+        } else {
+            // Legacy format: (idSet, jobId) — read from current state
+            job = state.jobs.find(j => j.id === jobOrJobId);
+            if (!job) return;
+            candidatesToMatch = state.candidates.filter(c => candidatesOrIdSet.has(c.id));
+        }
 
-        const candidatesToMatch = state.candidates.filter(c => idSet.has(c.id));
+        if (!job) return;
         const { analyzeJDAndResume } = await import('@/lib/groqService');
 
         for (const candidate of candidatesToMatch) {
@@ -815,6 +712,28 @@ export function DashboardProvider({ children }) {
         return false;
     };
 
+    const toggleJobStatus = async (jobId) => {
+        const job = state.jobs.find(j => j.id === jobId);
+        if (!job) return;
+        const newStatus = job.status === 'open' ? 'closed' : 'open';
+        try {
+            const res = await fetch('/api/jobs', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: jobId, status: newStatus })
+            });
+            const data = await res.json();
+            if (data.success) {
+                dispatch({ type: 'TOGGLE_JOB_STATUS', payload: { id: jobId, newStatus } });
+                return true;
+            }
+        } catch (err) {
+            console.error('Persistent toggleJobStatus failed:', err);
+        }
+        dispatch({ type: 'TOGGLE_JOB_STATUS', payload: { id: jobId, newStatus } });
+        return false;
+    };
+
     const updateCandidate = async (id, updates) => {
         try {
             const res = await fetch('/api/candidates', {
@@ -842,6 +761,7 @@ export function DashboardProvider({ children }) {
             addJob,
             updateJob,
             deleteJob,
+            toggleJobStatus,
             addCandidates,
             updateCandidate,
             removeCandidate,

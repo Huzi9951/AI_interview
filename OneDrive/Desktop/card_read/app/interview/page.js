@@ -122,9 +122,9 @@ function InterviewContent() {
                     }
 
                     // Set interview data from token
-                    // customQuestions can be [{question, expectedAnswer}, ...] or ["string", ...]
+                    // customQuestions can be [{question, expectedAnswer, source}, ...] or ["string", ...]
                     const rawCustomQs = decoded.customQuestions || [];
-                    const normalizedQs = rawCustomQs.map(q => typeof q === 'string' ? { question: q, expectedAnswer: '' } : q);
+                    const normalizedQs = rawCustomQs.map(q => typeof q === 'string' ? { question: q, expectedAnswer: '', source: 'manual' } : q);
                     const data = {
                         jobDescription: decoded.jobDescription || decoded.jobTitle || '',
                         resumeText: `Candidate: ${decoded.name || 'N/A'}\nEmail: ${decoded.email || 'N/A'}`,
@@ -146,6 +146,19 @@ function InterviewContent() {
                     const qCount = (data.questionCount || 6);
                     setMaxQuestions(qCount);
                     maxQuestionsRef.current = qCount;
+
+                    // Fetch existing interview record to get the ID
+                    try {
+                        const { getInterviewByToken } = await import('@/lib/db');
+                        const record = await getInterviewByToken(tokenHash);
+                        if (record) {
+                            setInterviewId(record.id);
+                            interviewIdRef.current = record.id;
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch interview record:', e);
+                    }
+
                     setPhase('permissions');
                 } catch (e) {
                     setNoAccess(true);
@@ -236,7 +249,7 @@ function InterviewContent() {
     // Attach camera stream when phase changes
     // =============================================
     useEffect(() => {
-        const activePhases = ['ready', 'asking', 'listening', 'evaluating', 'silencePrompt', 'done'];
+        const activePhases = ['ready', 'welcome', 'asking', 'listening', 'evaluating', 'silencePrompt', 'done'];
         if (activePhases.includes(phase) && videoRef.current && streamRef.current) {
             if (videoRef.current.srcObject !== streamRef.current) {
                 videoRef.current.srcObject = streamRef.current;
@@ -359,31 +372,68 @@ function InterviewContent() {
         }
 
         // Create DB record
+        // Create or initialize DB record
         try {
             const { createInterview, startInterviewRecord } = await import('@/lib/db');
             const iData = interviewDataRef.current;
-            const record = await createInterview({
-                candidateEmail: iData?.candidateEmail || 'admin-test@local',
-                candidateName: iData?.candidateName || 'Admin Test',
-                jobTitle: iData?.jobTitle || iData?.jobDescription?.substring(0, 100) || '',
-                jobId: iData?.jobId || '',
-                tokenHash: iData?.tokenHash || null,
-                customQuestions: iData?.customQuestions || [],
-            });
-            if (record) {
-                setInterviewId(record.id);
-                interviewIdRef.current = record.id;
-                await startInterviewRecord(record.id);
+            
+            if (!interviewIdRef.current) {
+                const record = await createInterview({
+                    candidateEmail: iData?.candidateEmail || 'admin-test@local',
+                    candidateName: iData?.candidateName || 'Admin Test',
+                    jobTitle: iData?.jobTitle || iData?.jobDescription?.substring(0, 100) || '',
+                    jobId: iData?.jobId || '',
+                    tokenHash: iData?.tokenHash || null,
+                    customQuestions: iData?.customQuestions || [],
+                });
+                if (record) {
+                    setInterviewId(record.id);
+                    interviewIdRef.current = record.id;
+                }
             }
-        } catch (e) { console.warn('DB record creation failed:', e); }
+
+            if (interviewIdRef.current) {
+                await startInterviewRecord(interviewIdRef.current);
+            }
+        } catch (e) { console.warn('DB record initialization failed:', e); }
 
         setPhase('ready');
     };
     useEffect(() => {
-        if (phase === 'ready' && interviewData && consentGiven) {
-            const t = setTimeout(() => askNextQuestion(0), 1500);
-            return () => clearTimeout(t);
+        let isCancelled = false;
+
+        async function playWelcome() {
+            if (phase === 'ready' && interviewData && consentGiven) {
+                setPhase('welcome');
+                const welcomeText = "Welcome to your interview. Once the interview begins, you will be asked a series of questions. After each question, you will have time to respond. Please ensure your microphone and camera remain on. Good luck!";
+                setCurrentQuestion(welcomeText);
+                setIsSpeaking(true);
+                
+                try {
+                    // Slight delay for transition
+                    await new Promise(r => setTimeout(r, 1000));
+                    if (!isCancelled) {
+                        const { speak } = await import('@/lib/speechService');
+                        await speak(welcomeText);
+                    }
+                } catch (e) {
+                    console.error('Welcome speech error:', e);
+                } finally {
+                    if (!isCancelled) {
+                        setIsSpeaking(false);
+                        setCurrentQuestion('');
+                        askNextQuestion(0);
+                    }
+                }
+            }
         }
+
+        playWelcome();
+
+        return () => {
+            isCancelled = true;
+            import('@/lib/speechService').then(s => s.stopSpeaking()).catch(() => {});
+        };
     }, [phase, interviewData, consentGiven]);
 
     // =============================================
@@ -661,13 +711,16 @@ function InterviewContent() {
 
         try {
             const { evaluateAnswer } = await import('@/lib/groqService');
+            const cq = currentQIdx < customQuestionsRef.current.length ? customQuestionsRef.current[currentQIdx] : null;
+            const isCustomQuestion = cq ? (cq.source === 'manual') : false;
+
             const evaluation = await evaluateAnswer(currentQuestion, answer, {
                 targetSkill: interviewDataRef.current.skillAnalysis?.interview_focus_areas?.[questionIndexRef.current] || '',
                 jobTitle: interviewDataRef.current.skillAnalysis?.job_title || interviewDataRef.current.jobTitle || '',
                 jobDescription: interviewDataRef.current.jobDescription || '',
                 expectedAnswer,
                 isJDRelevant,
-                isCustomQuestion: currentQIdx < customQuestionsRef.current.length,
+                isCustomQuestion,
             });
             evaluation.isFollowUp = wasFollowUp;
             evaluationsRef.current = [...evaluationsRef.current, evaluation];
@@ -793,7 +846,25 @@ function InterviewContent() {
             stopListening(); stopSpeaking();
         } catch (e) { }
 
-        // Turn off camera and mic entirely
+        setPhase('processing'); // Moved from 'done' so UI hides camera definitely
+        setProcessingMsg('Processing your interview...');
+
+        // Stop recording and AWAIT the upload BEFORE closing tracks
+        let recordingUrl = null;
+        try {
+            const { stopRecording } = await import('@/lib/recordingService');
+            const blob = await stopRecording();
+            if (blob && interviewIdRef.current) {
+                setProcessingMsg('Uploading recording...');
+                try {
+                    const { uploadRecording } = await import('@/lib/db');
+                    const url = await uploadRecording(interviewIdRef.current, blob);
+                    if (url) recordingUrl = url;
+                } catch (e) { console.warn('Upload failed:', e); }
+            }
+        } catch (e) { console.warn('Stop recording failed:', e); }
+
+        // NOW it's safe to turn off camera and mic entirely
         try {
             const { stopAllSharedStreams } = await import('@/lib/mediaStore');
             stopAllSharedStreams();
@@ -810,24 +881,6 @@ function InterviewContent() {
             videoRef.current.srcObject = null;
         }
         setCameraActive(false);
-
-        setPhase('processing'); // Moved from 'done' so UI hides camera definitely
-        setProcessingMsg('Processing your interview...');
-
-        // Stop recording and AWAIT the upload
-        let recordingUrl = null;
-        try {
-            const { stopRecording } = await import('@/lib/recordingService');
-            const blob = await stopRecording();
-            if (blob && interviewIdRef.current) {
-                setProcessingMsg('Uploading recording...');
-                try {
-                    const { uploadRecording } = await import('@/lib/db');
-                    const url = await uploadRecording(interviewIdRef.current, blob);
-                    if (url) recordingUrl = url;
-                } catch (e) { console.warn('Upload failed:', e); }
-            }
-        } catch (e) { console.warn('Stop recording failed:', e); }
 
         setProcessingMsg('Generating your comprehensive report...');
 
@@ -1209,7 +1262,7 @@ function InterviewContent() {
                     <div className={styles.questionArea}>
                         {currentQuestion && (
                             <div className={styles.questionBubble}>
-                                <div className={styles.questionLabel}>Question {questionIndex + 1}</div>
+                                <div className={styles.questionLabel}>{phase === 'welcome' ? 'Welcome' : `Question ${questionIndex + 1}`}</div>
                                 <div className={styles.questionText}>{currentQuestion}</div>
                             </div>
                         )}

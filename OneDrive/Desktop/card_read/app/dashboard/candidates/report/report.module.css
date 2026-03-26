@@ -1,7 +1,8 @@
 .pageWrapper {
-    background-color: #1e293b;
+    background-color: #ffffff;
     min-height: 100vh;
     width: 100%;
+    color: #1a1a2e;
 }
 
 .container {
@@ -15,17 +16,18 @@
 .errorCard {
     text-align: center;
     padding: 60px 40px;
-    background: rgba(30, 41, 59, 0.85);
+    background: #ffffff;
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #f8fafc;
+    border: 1px solid #e8e8ef;
+    color: #1a1a2e;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 .spinner {
     width: 36px;
     height: 36px;
-    border: 3px solid var(--border-subtle);
-    border-top-color: var(--accent-primary);
+    border: 3px solid #f3f4f6;
+    border-top-color: #e8604c;
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin: 0 auto 16px;
@@ -34,32 +36,31 @@
 .pageTitle {
     font-size: 1.6rem;
     font-weight: 800;
-    background: var(--gradient-primary);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #1a1a2e;
     margin-bottom: 4px;
 }
 
 .subtitle {
-    color: var(--text-secondary);
+    color: #64748b;
     font-size: 0.95rem;
 }
 
 .backBtn {
-    background: var(--bg-glass);
-    border: 1px solid var(--border-subtle);
-    color: var(--text-accent);
+    background: #ffffff;
+    border: 1px solid #e8e8ef;
+    color: #e8604c;
     padding: 8px 16px;
     border-radius: var(--radius-md);
     cursor: pointer;
     margin-bottom: 24px;
     font-size: 0.85rem;
+    font-weight: 600;
     transition: all var(--transition-fast);
 }
 
 .backBtn:hover {
-    border-color: var(--accent-primary);
+    background: #fef2f0;
+    border-color: #e8604c;
 }
 
 .reportHeader {
@@ -76,7 +77,7 @@
     flex-direction: column;
     gap: 4px;
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: #94a3b8;
     text-align: right;
 }
 
@@ -86,21 +87,22 @@
     gap: 24px;
     margin-bottom: 32px;
     padding: 24px;
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(12px);
+    background: #ffffff;
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid #e8e8ef;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
 .scoreCircle {
     width: 100px;
     height: 100px;
     border-radius: 50%;
-    background: var(--gradient-primary);
+    background: linear-gradient(135deg, #e8604c, #f0845e);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 6px 16px rgba(232, 96, 76, 0.25);
 }
 
 .scoreNumber {
@@ -112,20 +114,23 @@
 
 .scoreLabel {
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .recBadge {
     font-size: 1.2rem;
     font-weight: 700;
     padding: 8px 20px;
-    border-radius: var(--radius-full);
-    background: var(--bg-glass);
-    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    background: #fef2f0;
+    border: 1px solid #fce4e0;
+    color: #1a1a2e;
 }
 
 .recBadge[data-rec="no"] {
     color: #ef4444;
+    background: #fef2f2;
+    border-color: #fee2e2;
 }
 
 .section {
@@ -136,18 +141,18 @@
     font-size: 1.1rem;
     font-weight: 700;
     margin-bottom: 16px;
-    color: var(--text-primary);
+    color: #1a1a2e;
 }
 
 .glass {
-    background: rgba(30, 41, 59, 0.75);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    border: 1px solid #e8e8ef;
     border-radius: var(--radius-lg);
     padding: 20px;
-    color: #e2e8f0;
+    color: #334155;
     line-height: 1.7;
     font-size: 0.95rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
 .swGrid {
@@ -164,10 +169,10 @@
 .bulletList li {
     padding: 6px 0;
     padding-left: 16px;
-    border-left: 3px solid #6366f1;
+    border-left: 3px solid #e8604c;
     margin-bottom: 8px;
     font-size: 0.95rem;
-    color: #e2e8f0;
+    color: #475569;
 }
 
 .questionList {
@@ -177,15 +182,17 @@
 }
 
 .questionCard {
-    background: rgba(15, 23, 42, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    border: 1px solid #e8e8ef;
     border-radius: var(--radius-lg);
-    padding: 20px;
+    padding: 24px;
     transition: all var(--transition-base);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
 .questionCard:hover {
-    border-color: var(--border-medium);
+    border-color: #e8604c;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
 }
 
 .qHeader {
@@ -197,9 +204,9 @@
 
 .qNum {
     font-weight: 700;
-    color: var(--text-accent);
+    color: #e8604c;
     font-size: 0.85rem;
-    background: rgba(99, 102, 241, 0.1);
+    background: #fef2f0;
     padding: 4px 10px;
     border-radius: var(--radius-full);
 }
@@ -207,45 +214,47 @@
 .qScore {
     font-weight: 700;
     font-family: var(--font-mono);
-    color: var(--accent-success);
+    color: #10b981;
 }
 
 .qText {
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 8px;
-    font-size: 1rem;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 12px;
+    font-size: 1.05rem;
     line-height: 1.5;
 }
 
 .qAnswer {
-    color: #e2e8f0;
+    color: #334155;
     font-size: 0.95rem;
     line-height: 1.6;
-    padding: 12px;
-    background: rgba(255, 255, 255, 0.05);
+    padding: 16px;
+    background: #f8fafc;
     border-radius: var(--radius-md);
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+    border: 1px solid #f1f5f9;
 }
 
 .qTimestamp {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: #94a3b8;
     font-family: var(--font-mono);
-    margin-bottom: 8px;
+    margin-bottom: 12px;
 }
 
 .qMeta {
     display: flex;
     gap: 16px;
-    font-size: 0.8rem;
-    color: var(--text-muted);
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 500;
 }
 
 .violationList {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
 }
 
 .violationItem {
@@ -253,30 +262,30 @@
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    background: rgba(239, 68, 68, 0.05);
-    border: 1px solid rgba(239, 68, 68, 0.15);
+    background: #fffcfc;
+    border: 1px solid #fee2e2;
     border-radius: var(--radius-md);
     font-size: 0.85rem;
 }
 
 .violationType {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--accent-danger);
-    padding: 3px 8px;
+    background: #fee2e2;
+    color: #ef4444;
+    padding: 4px 10px;
     border-radius: var(--radius-full);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     white-space: nowrap;
 }
 
 .violationMsg {
-    color: var(--text-secondary);
+    color: #334155;
     flex: 1;
 }
 
 .violationTime {
-    color: var(--text-muted);
+    color: #94a3b8;
     font-family: var(--font-mono);
     font-size: 0.75rem;
     white-space: nowrap;
@@ -290,17 +299,19 @@
 }
 
 .interviewCard {
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
+    background: #ffffff;
+    border: 1px solid #e8e8ef;
     border-radius: var(--radius-lg);
-    padding: 20px;
+    padding: 24px;
     cursor: pointer;
     transition: all var(--transition-base);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
 .interviewCard:hover {
-    border-color: var(--accent-primary);
-    box-shadow: var(--shadow-glow);
+    border-color: #e8604c;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(232, 96, 76, 0.1);
 }
 
 .ivHeader {
@@ -312,39 +323,44 @@
 
 .ivJob {
     font-weight: 700;
-    color: var(--text-primary);
+    color: #1a1a2e;
+    font-size: 1.1rem;
 }
 
 .ivStatus {
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: var(--radius-full);
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
 .ivCompleted {
-    background: rgba(16, 185, 129, 0.15);
-    color: var(--accent-success);
+    background: #ecfdf5;
+    color: #10b981;
 }
 
 .ivPending {
-    background: rgba(245, 158, 11, 0.15);
-    color: var(--accent-warning);
+    background: #fffbeb;
+    color: #d97706;
 }
 
 .ivMeta {
     display: flex;
     gap: 16px;
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: #64748b;
 }
 
 .ivRec {
-    margin-top: 8px;
-    font-size: 0.85rem;
-    color: var(--text-accent);
-    font-weight: 600;
+    margin-top: 12px;
+    font-size: 0.9rem;
+    color: #e8604c;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 @media (max-width: 768px) {

@@ -23,13 +23,10 @@ function getAudioContext() {
 // TTS: WebSocket Streaming — gapless playback
 // =============================================
 let ttsAborted = false;
-let ttsWs = null;
-let ttsResolve = null;
-let ttsScheduledEnd = 0;   // AudioContext time when last scheduled chunk ends
-let ttsSources = [];       // all scheduled AudioBufferSourceNodes (for stopSpeaking)
-let ttsFlushed = false;    // server sent Flushed event
 let ttsPlaybackDone = false;
 let ttsLastSourceNode = null;
+let ttsSources = [];
+let ttsResolve = null;
 
 // =============================================
 // Warm-up: pre-initialize AudioContext
@@ -63,123 +60,77 @@ export async function speak(text) {
 
     stopSpeaking();
     ttsAborted = false;
-    ttsFlushed = false;
     ttsPlaybackDone = false;
     ttsLastSourceNode = null;
+    ttsSources = [];
 
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') {
         await ctx.resume();
     }
 
-    ttsScheduledEnd = ctx.currentTime; // start playback immediately
-    ttsSources = [];
-
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
         ttsResolve = resolve;
 
-        const wsUrl = `wss://api.deepgram.com/v1/speak?model=aura-2-thalia-en&encoding=linear16&sample_rate=${TTS_SAMPLE_RATE}`;
-        ttsWs = new WebSocket(wsUrl, ['token', DEEPGRAM_API_KEY]);
-        ttsWs.binaryType = 'arraybuffer';
-
-        ttsWs.onopen = () => {
-            if (ttsAborted) { closeTtsWs(); return; }
-            ttsWs.send(JSON.stringify({ type: 'Speak', text }));
-            ttsWs.send(JSON.stringify({ type: 'Flush' }));
-        };
-
-        ttsWs.onmessage = (event) => {
-            if (ttsAborted) return;
-
-            if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
-                // Convert PCM16 to Float32 and schedule immediately — no debounce
-                const pcm = new Int16Array(event.data);
-                const floats = new Float32Array(pcm.length);
-                for (let i = 0; i < pcm.length; i++) {
-                    floats[i] = pcm[i] / 32768;
-                }
-                scheduleChunk(floats);
-            } else if (typeof event.data === 'string') {
-                try {
-                    const msg = JSON.parse(event.data);
-                    if (msg.type === 'Flushed') {
-                        ttsFlushed = true;
-                        closeTtsWs();
-                        checkPlaybackComplete();
-                    }
-                } catch (e) { }
-            }
-        };
-
-        ttsWs.onerror = (err) => {
-            console.error('Deepgram TTS WebSocket error:', err);
-            closeTtsWs();
-            fallbackSpeak(text).then(() => finishTts());
-        };
-
-        ttsWs.onclose = () => {
-            if (!ttsFlushed && !ttsAborted) {
-                ttsFlushed = true;
-                checkPlaybackComplete();
-            }
-        };
-    });
-
-    function scheduleChunk(floats) {
-        if (ttsAborted) return;
-
-        const ctx = getAudioContext();
-        const buffer = ctx.createBuffer(1, floats.length, TTS_SAMPLE_RATE);
-        buffer.getChannelData(0).set(floats);
-
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(ctx.destination);
-
-        const startTime = Math.max(ctx.currentTime, ttsScheduledEnd);
-        source.start(startTime);
-        ttsScheduledEnd = startTime + buffer.duration;
-        ttsSources.push(source);
-        ttsLastSourceNode = source;
-
-        source.onended = () => {
-            if (source === ttsLastSourceNode) {
-                ttsPlaybackDone = true;
-                checkPlaybackComplete();
-            }
-        };
-    }
-
-    function checkPlaybackComplete() {
-        if (ttsFlushed && ttsPlaybackDone) {
-            finishTts();
-        }
-        if (ttsFlushed && ttsSources.length === 0) {
-            finishTts();
-        }
-    }
-}
-
-function closeTtsWs() {
-    if (ttsWs) {
         try {
-            if (ttsWs.readyState === WebSocket.OPEN) {
-                ttsWs.send(JSON.stringify({ type: 'Close' }));
+            const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en&encoding=linear16&sample_rate=24000', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text })
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    console.error('Deepgram API Key is invalid or expired (401 Unauthorized).');
+                } else {
+                    console.error('Deepgram TTS HTTP error:', response.status);
+                }
+                throw new Error('Deepgram TTS request failed');
             }
-            ttsWs.close();
-        } catch (e) { }
-        ttsWs = null;
-    }
+
+            // Instead of dealing with chunk streaming, we can just grab the entire audio response.
+            // For typical interview questions (1-3 sentences), REST is < 300ms total.
+            const arrayBuffer = await response.arrayBuffer();
+            if (ttsAborted) return finishTts();
+
+            // Decode the audio data natively
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+            if (ttsAborted) return finishTts();
+
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+            
+            ttsSources.push(source);
+            ttsLastSourceNode = source;
+
+            source.start(ctx.currentTime);
+
+            source.onended = () => {
+                ttsPlaybackDone = true;
+                finishTts();
+            };
+
+        } catch (err) {
+            console.error('Deepgram Speech Output Error:', err);
+            // Fallback to native browser synthesis on API failure
+            fallbackSpeak(text).then(() => finishTts());
+        }
+    });
 }
 
 function finishTts() {
-    closeTtsWs();
     if (ttsResolve) {
         const r = ttsResolve;
         ttsResolve = null;
         r();
     }
 }
+
+
 
 function fallbackSpeak(text) {
     return new Promise((resolve) => {
@@ -200,8 +151,6 @@ export function stopSpeaking() {
         try { source.stop(); } catch (e) { }
     }
     ttsSources = [];
-
-    closeTtsWs();
 
     if (ttsResolve) {
         const r = ttsResolve;
@@ -243,7 +192,7 @@ export function startListening(onUpdate) {
         .then((stream) => {
             mediaStream = stream;
 
-            const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&punctuate=true&interim_results=true&endpointing=10000&smart_format=true&language=en-US`;
+            const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&punctuate=true&interim_results=true&endpointing=10000&smart_format=true&language=en-US`;
             ws = new WebSocket(wsUrl, ['token', DEEPGRAM_API_KEY]);
 
             ws.onopen = () => {
@@ -309,6 +258,12 @@ export function startListening(onUpdate) {
 
             ws.onclose = (event) => {
                 console.log('Deepgram WebSocket closed:', event.code, event.reason);
+                
+                // Codes 1008 (Policy Violation) or 4xxx usually mean auth/api key issues
+                if (event.code === 1008 || (event.code >= 4000 && event.code < 5000)) {
+                    console.error('Deepgram STT Authentication Error: Please check if your API key is valid and has "nova" model access.');
+                }
+
                 // Codes other than 1000 (Normal) and 1005 (No Status) suggest a failure
                 if (event.code !== 1000 && event.code !== 1005 && !fallbackActive) {
                     fallbackActive = true;

@@ -292,16 +292,14 @@ Be precise and honest in your scoring. Do NOT inflate scores.
 - Score 10: Exceptional, expert-level answer
 ${context.expectedAnswer ? "\\nIMPORTANT: An expected answer has been provided by the hiring manager. Compare the candidate's answer against it. The closer the candidate's answer aligns with the expected answer (in substance, not necessarily wording), the higher the score should be." : ""}
 ${context.isCustomQuestion && !context.expectedAnswer ? `\nIMPORTANT: This is a manually added custom question, and no expected answer was provided.
-Determine if the question is technical or non-technical (e.g., behavioral, HR, introductory).
-If it is a NON-TECHNICAL question, you MUST set "graded" to false and "score" to null, because non-technical questions should not be graded.
-If it is a TECHNICAL question, evaluate the technical accuracy relying on your own knowledge and set "graded" to true.` : ""}
+You MUST set "graded" to false and "score" to null. Do NOT grade this question.` : ""}
 
 IMPORTANT: If the question being evaluated is ALREADY a follow-up question, you MUST set "follow_up_needed" to false to prevent infinite follow-ups.
 
 Return JSON with this EXACT structure (if graded is false, scores can be null):
 {
   "score": 0-10, // or null if graded is false
-  "graded": true/false, // set to false for non-technical custom queries lacking an expected answer
+  "graded": true/false, // true for AI-generated questions or custom questions WITH expected answers. false for custom questions WITHOUT expected answers.
   "technical_depth": 0-10,
   "technical_depth": 0-10,
   "clarity": 0-10,

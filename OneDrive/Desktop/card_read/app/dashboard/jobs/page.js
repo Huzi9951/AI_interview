@@ -8,7 +8,9 @@ import AnalysisModal from '@/components/AnalysisModal';
 import styles from './jobs.module.css';
 
 export default function JobsPage() {
-    const { state, dispatch, unassignFromJob, assignToJob, updateMatchScore, deleteJob } = useDashboard();
+    const { state, dispatch, unassignFromJob, assignToJob, updateMatchScore, deleteJob, toggleJobStatus, updateCandidateJobStatus } = useDashboard();
+    const user = state.user || {};
+    const role = user.role || 'ADMIN';
     const [selectedJob, setSelectedJob] = useState(null);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     
@@ -86,29 +88,12 @@ export default function JobsPage() {
         if (assignSelection.size === 0 || !selectedJob) return;
 
         const candidateIds = Array.from(assignSelection);
+        // assignToJob already triggers matchCandidatesWithJob internally
         await assignToJob(assignSelection, selectedJob.id, selectedJob.title);
 
         showToast(`✓ Assigned ${candidateIds.length} candidate(s) to ${selectedJob.title}`);
         setShowAssignModal(false);
         setAssignSelection(new Set());
-
-        // Trigger AI Resume Matching
-        const { analyzeJDAndResume } = await import('@/lib/groqService');
-        const jd = `${selectedJob.title}\n${selectedJob.description}\n${(selectedJob.skills || []).join(', ')}`;
-
-        candidateIds.forEach(async (id) => {
-            const candidate = state.candidates.find(c => c.id === id);
-            if (candidate && candidate.resumeText) {
-                try {
-                    const result = await analyzeJDAndResume(jd, candidate.resumeText);
-                    if (result && result.overall_match_score !== undefined) {
-                        await updateMatchScore(id, selectedJob.id, result.overall_match_score, result);
-                    }
-                } catch (err) {
-                    console.error(`Match analysis failed for ${candidate.email}:`, err);
-                }
-            }
-        });
     };
 
     // â”€â”€ Open single invite modal (with question preview) â”€â”€
@@ -127,9 +112,26 @@ export default function JobsPage() {
         setShowInviteModal(true);
     };
 
-    // â”€â”€ Generate AI questions for preview â”€â”€
+    // ── Generate AI questions for preview ──
     const generateQuestionsForPreview = async () => {
         if (!selectedJob) return;
+
+        // Check if any candidate has already been invited to this job with custom questions
+        let existingQuestions = null;
+        for (const c of state.candidates) {
+            const assignment = c.jobAssignments?.find(a => a.jobId === selectedJob.id);
+            if (assignment && assignment.customQuestions && assignment.customQuestions.length > 0) {
+                existingQuestions = assignment.customQuestions;
+                break;
+            }
+        }
+
+        if (existingQuestions) {
+            setPreviewQuestions(existingQuestions);
+            showToast('✓ Loaded saved AI questions for this job.');
+            return;
+        }
+
         setIsGeneratingQuestions(true);
         try {
             const { generateInterviewQuestions } = await import('@/lib/groqService');
@@ -169,54 +171,49 @@ export default function JobsPage() {
         setPreviewQuestions(newQ);
     };
 
-    // â”€â”€ Send invite via API â”€â”€
+    // ── Send invite via API ──
     const handleSendInvite = async () => {
         if (!inviteCandidate || !selectedJob) return;
-        setInviteStep(4);
-        setInviteSending(true);
 
-        try {
-            const questionsPayload = previewQuestions.map(q => ({
-                question: q.question,
-                expectedAnswer: q.expectedAnswer || '',
-            }));
+        // Optimistic UI updates
+        setShowInviteModal(false);
+        showToast(`✓ Sending invite to ${inviteCandidate.name || inviteCandidate.email} in the background...`);
 
-            const res = await fetch('/api/send-invite', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    candidates: [{ 
-                        email: inviteCandidate.email, 
-                        name: inviteCandidate.name,
-                        resumeText: inviteCandidate.resumeText || '',
-                        matchScore: inviteCandidate.matchScore || 0,
-                    }],
-                    jobTitle: selectedJob.title,
-                    jobId: selectedJob.id,
-                    jobDescription: selectedJob.description || '',
-                    expiryHours: inviteExpiryHours,
-                    customQuestions: questionsPayload,
-                    questionCount: previewQuestions.length,
-                }),
-            });
+        dispatch({
+            type: 'UPDATE_CANDIDATE_JOB_STATUS',
+            payload: { candidateId: inviteCandidate.id, jobId: selectedJob.id, status: 'invited' },
+        });
 
-            const data = await res.json();
+        const questionsPayload = previewQuestions.map(q => ({
+            question: q.question,
+            expectedAnswer: q.expectedAnswer || '',
+            source: q.source || 'manual'
+        }));
 
+        fetch('/api/send-invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                candidates: [{ 
+                    email: inviteCandidate.email, 
+                    name: inviteCandidate.name,
+                    resumeText: inviteCandidate.resumeText || '',
+                    matchScore: inviteCandidate.matchScore || 0,
+                }],
+                jobTitle: selectedJob.title,
+                jobId: selectedJob.id,
+                jobDescription: selectedJob.description || '',
+                expiryHours: inviteExpiryHours,
+                customQuestions: questionsPayload,
+                questionCount: previewQuestions.length,
+            }),
+        }).then(res => res.json()).then(data => {
             if (data.success) {
-                dispatch({
-                    type: 'UPDATE_CANDIDATE_JOB_STATUS',
-                    payload: { candidateId: inviteCandidate.id, jobId: selectedJob.id, status: 'invited' },
-                });
-                showToast(`✓ Invite sent to ${inviteCandidate.name || inviteCandidate.email}!`);
+                console.log(`✓ Invite sent to ${inviteCandidate.name || inviteCandidate.email}!`);
             } else {
-                showToast(`⚠️ Failed: ${data.error || 'Unknown error'}`);
+                console.error(`⚠️ Failed: ${data.error || 'Unknown error'}`);
             }
-        } catch (err) {
-            showToast(`⚠️ Error sending invite: ${err.message}`);
-        } finally {
-            setInviteSending(false);
-            setShowInviteModal(false);
-        }
+        }).catch(err => console.error(`⚠️ Error sending invite: ${err.message}`));
     };
 
     const handleStatusUpdate = async (candidateId, newStatus) => {
@@ -259,7 +256,9 @@ export default function JobsPage() {
         <div className={styles.jobsPage}>
             <div className={styles.jobsHeader}>
                 <h1 className={styles.jobsTitle}>Jobs</h1>
-                <Link href="/dashboard/jobs/create" className={styles.createJobBtn}>+ Create Job</Link>
+                {role === 'ADMIN' && (
+                    <Link href="/dashboard/jobs/create" className={styles.createJobBtn}>+ Create Job</Link>
+                )}
             </div>
 
             <div className={styles.jobsContent}>
@@ -297,27 +296,29 @@ export default function JobsPage() {
                         <>
                             <div className={styles.detailHeader}>
                                 <h2 className={styles.detailTitle}>{selectedJob.title}</h2>
-                                <div className={styles.detailActions}>
-                                    <button className={`${styles.statusToggle} ${selectedJob.status === 'open' ? styles.statusOpen : styles.statusClosed}`}
-                                        onClick={() => dispatch({ type: 'TOGGLE_JOB_STATUS', payload: selectedJob.id })}>
-                                        {selectedJob.status === 'open' ? 'Open' : 'Closed'}
-                                    </button>
-                                    <button className={styles.deleteBtn} disabled={isDeletingJob} onClick={async () => {
-                                        if (confirm('Are you absolutely sure you want to delete this job? ALL associated candidate assignments, interview records, and video recordings across the system will be permanently deleted.')) {
-                                            setIsDeletingJob(true);
-                                            const success = await deleteJob(selectedJob.id);
-                                            if (success) {
-                                                setSelectedJob(null);
-                                                showToast('Job and all associated data deleted completely');
-                                            } else {
-                                                showToast('Failed to wipe all associated Job data.');
+                                {role === 'ADMIN' && (
+                                    <div className={styles.detailActions}>
+                                        <button className={`${styles.statusToggle} ${selectedJob.status === 'open' ? styles.statusOpen : styles.statusClosed}`}
+                                            onClick={() => toggleJobStatus(selectedJob.id)}>
+                                            {selectedJob.status === 'open' ? 'Open' : 'Closed'}
+                                        </button>
+                                        <button className={styles.deleteBtn} disabled={isDeletingJob} onClick={async () => {
+                                            if (confirm('Are you absolutely sure you want to delete this job? ALL associated candidate assignments, interview records, and video recordings across the system will be permanently deleted.')) {
+                                                setIsDeletingJob(true);
+                                                const success = await deleteJob(selectedJob.id);
+                                                if (success) {
+                                                    setSelectedJob(null);
+                                                    showToast('Job and all associated data deleted completely');
+                                                } else {
+                                                    showToast('Failed to wipe all associated Job data.');
+                                                }
+                                                setIsDeletingJob(false);
                                             }
-                                            setIsDeletingJob(false);
-                                        }
-                                    }}>
-                                        {isDeletingJob ? 'Deleting...' : 'Delete'}
-                                    </button>
-                                </div>
+                                        }}>
+                                            {isDeletingJob ? 'Deleting...' : 'Delete'}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
                             <div className={styles.tabBar}>
@@ -363,9 +364,11 @@ export default function JobsPage() {
                             {activeTab === 'candidates' && (
                                 <>
                                     <div className={styles.candidatesToolbar}>
-                                        <button className={styles.assignBtn} onClick={() => { setAssignSelection(new Set()); setShowAssignModal(true); }}>
-                                            + Assign Candidates
-                                        </button>
+                                        {role === 'ADMIN' && (
+                                            <button className={styles.assignBtn} onClick={() => { setAssignSelection(new Set()); setShowAssignModal(true); }}>
+                                                + Assign Candidates
+                                            </button>
+                                        )}
                                         <select
                                             value={statusFilter}
                                             onChange={e => setStatusFilter(e.target.value)}
@@ -383,7 +386,7 @@ export default function JobsPage() {
                                     {jobCandidates.length === 0 ? (
                                         <div className={styles.emptyCandidates}>
                                             <div className={styles.emptyIcon}>👥</div>
-                                            <p>No candidates assigned yet. Click &quot;Assign Candidates&quot; to add from your pool.</p>
+                                            <p>{role === 'ADMIN' ? 'No candidates assigned yet. Click "Assign Candidates" to add from your pool.' : 'No candidates assigned yet.'}</p>
                                         </div>
                                     ) : (
                                         <div className={styles.candidatesTable}>
@@ -391,8 +394,8 @@ export default function JobsPage() {
                                                 <thead>
                                                     <tr>
                                                         <th>Candidate</th>
-                                                        <th>Contact</th>
-                                                        <th>Match Score</th>
+                                                        {role === 'ADMIN' && <th>Contact</th>}
+                                                        {role === 'ADMIN' && <th>Match Score</th>}
                                                         <th>Status</th>
                                                         <th>Actions</th>
                                                     </tr>
@@ -404,34 +407,38 @@ export default function JobsPage() {
                                                                 <div className={styles.cName}>{c.name || '—'}</div>
                                                                 {c.designation && <div className={styles.cRole}>{c.designation}</div>}
                                                             </td>
-                                                            <td>
-                                                                <div className={styles.cEmail}>{c.email}</div>
-                                                                {c.phone && <div className={styles.cPhone}>{c.phone}</div>}
-                                                            </td>
-                                                            <td>
-                                                                {c.matchScore !== undefined && c.matchScore !== null ? (
-                                                                    <div className={`${styles.matchScoreWrapper} ${c.analysis ? styles.clickable : ""}`} onClick={() => c.analysis && handleScoreClick(c, selectedJob.id)} title={c.analysis ? "Click for Deep Analysis" : ""}>
-                                                                        <div className={styles.matchScoreBar}>
-                                                                            <div className={styles.matchScoreFill} style={{
-                                                                                width: `${c.matchScore}%`,
-                                                                                backgroundColor: c.matchScore > 75 ? '#22c55e' : c.matchScore > 50 ? '#eab308' : '#ef4444'
-                                                                            }} />
+                                                            {role === 'ADMIN' && (
+                                                                <td>
+                                                                    <div className={styles.cEmail}>{c.email}</div>
+                                                                    {c.phone && <div className={styles.cPhone}>{c.phone}</div>}
+                                                                </td>
+                                                            )}
+                                                            {role === 'ADMIN' && (
+                                                                <td>
+                                                                    {c.matchScore !== undefined && c.matchScore !== null ? (
+                                                                        <div className={`${styles.matchScoreWrapper} ${c.analysis ? styles.clickable : ""}`} onClick={() => c.analysis && handleScoreClick(c, selectedJob.id)} title={c.analysis ? "Click for Deep Analysis" : ""}>
+                                                                            <div className={styles.matchScoreBar}>
+                                                                                <div className={styles.matchScoreFill} style={{
+                                                                                    width: `${c.matchScore}%`,
+                                                                                    backgroundColor: c.matchScore > 75 ? '#22c55e' : c.matchScore > 50 ? '#eab308' : '#ef4444'
+                                                                                }} />
+                                                                            </div>
+                                                                            <span className={styles.matchScoreText}>{c.matchScore}% Match</span>
                                                                         </div>
-                                                                        <span className={styles.matchScoreText}>{c.matchScore}% Match</span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className={styles.noResume}>No Resume</span>
-                                                                )}
-                                                            </td>
+                                                                    ) : (
+                                                                        <span className={styles.noResume}>{c.resumeText ? 'Matching...' : 'No Resume'}</span>
+                                                                    )}
+                                                                </td>
+                                                            )}
                                                             <td>{statusBadge(c.jobStatus, c.jobScore)}</td>
                                                             <td>
                                                                     <div className={styles.cActions}>
-                                                                        {(c.jobStatus === 'assigned') && (
+                                                                        {role === 'ADMIN' && c.jobStatus === 'assigned' && (
                                                                             <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
                                                                                 📤 Send Invite
                                                                             </button>
                                                                         )}
-                                                                        {c.jobStatus === 'invited' && (
+                                                                        {role === 'ADMIN' && c.jobStatus === 'invited' && (
                                                                             <>
                                                                                 <span className={styles.actionWaiting} style={{ marginRight: 8 }}>⏳ Awaiting</span>
                                                                                 <button className={styles.actionSend} onClick={() => openInviteFor(c)}>
@@ -439,11 +446,17 @@ export default function JobsPage() {
                                                                                 </button>
                                                                             </>
                                                                         )}
-                                                                        {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed') && (
+                                                                        {role === 'ADMIN' && (c.jobStatus === 'completed' || c.jobStatus === 'interviewed') && (
                                                                             <>
                                                                                 <button className={styles.actionAccept} onClick={() => handleStatusUpdate(c.id, 'accepted')}>✅ Accept</button>
                                                                                 <button className={styles.actionReject} onClick={() => handleStatusUpdate(c.id, 'rejected')}>❌ Reject</button>
                                                                             </>
+                                                                        )}
+                                                                        {c.jobStatus === 'accepted' && (
+                                                                            <span className={styles.actionAccepted || styles.actionAccept} style={{ opacity: 0.7, cursor: 'default', pointerEvents: 'none' }}>🎉 Accepted</span>
+                                                                        )}
+                                                                        {c.jobStatus === 'rejected' && (
+                                                                            <span className={styles.actionRejected || styles.actionReject} style={{ opacity: 0.7, cursor: 'default', pointerEvents: 'none' }}>❌ Rejected</span>
                                                                         )}
                                                                         {(c.jobStatus === 'completed' || c.jobStatus === 'interviewed' || c.jobStatus === 'accepted' || c.jobStatus === 'rejected') && (
                                                                             <Link href={`/dashboard/candidates/report?email=${encodeURIComponent(c.email)}`}
@@ -452,19 +465,20 @@ export default function JobsPage() {
                                                                             </Link>
                                                                         )}
                                                                         
-                                                                        {/* Unassign button */}
-                                                                        <button 
-                                                                            className={styles.actionUnassign} 
-                                                                            onClick={() => {
-                                                                                if (confirm(`Are you sure you want to unassign ${c.name || c.email} from this job?`)) {
-                                                                                    unassignFromJob(c.id, selectedJob.id);
-                                                                                    showToast(`✓ Candidate unassigned`);
-                                                                                }
-                                                                            }}
-                                                                            title="Unassign from this job"
-                                                                        >
-                                                                            🚫 Unassign
-                                                                        </button>
+                                                                        {role === 'ADMIN' && (
+                                                                            <button 
+                                                                                className={styles.actionUnassign} 
+                                                                                onClick={() => {
+                                                                                    if (confirm(`Are you sure you want to unassign ${c.name || c.email} from this job?`)) {
+                                                                                        unassignFromJob(c.id, selectedJob.id);
+                                                                                        showToast(`✓ Candidate unassigned`);
+                                                                                    }
+                                                                                }}
+                                                                                title="Unassign from this job"
+                                                                            >
+                                                                                🚫 Unassign
+                                                                            </button>
+                                                                        )}
                                                                     </div>
                                                             </td>
                                                         </tr>
@@ -587,9 +601,14 @@ export default function JobsPage() {
                             {/* STEP 2: Custom Questions */}
                             {inviteStep === 2 && (
                                 <div style={{ padding: 24 }}>
-                                    <p style={{ fontSize: '0.88rem', color: '#6b7280', marginBottom: 16, lineHeight: 1.5 }}>
-                                        Add custom questions with optional expected answers (for grading):
-                                    </p>
+                                    <div style={{ marginBottom: 16, lineHeight: 1.5 }}>
+                                        <p style={{ fontSize: '0.88rem', color: '#6b7280', marginBottom: 4 }}>
+                                            Add custom questions with optional expected answers:
+                                        </p>
+                                        <p style={{ fontSize: '0.8rem', color: '#e8604c', fontWeight: 600 }}>
+                                            ⚠️ Warning: If no expected answer is provided, the custom question will not be graded.
+                                        </p>
+                                    </div>
                                     {inviteQuestions.map((q, i) => (
                                         <div key={i} style={{ marginBottom: 12, background: '#f8f9fa', border: '1px solid #e8e8ef', borderRadius: 10, padding: '12px 14px' }}>
                                             <div className={styles.modalQuestionRow}>

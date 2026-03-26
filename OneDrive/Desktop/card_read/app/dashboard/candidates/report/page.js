@@ -6,7 +6,7 @@ import styles from './report.module.css';
 import { useDashboard } from '@/context/DashboardContext';
 
 function ReportContent() {
-    const { state, dispatch } = useDashboard();
+    const { state, dispatch, updateCandidateJobStatus } = useDashboard();
     const searchParams = useSearchParams();
     const [interviews, setInterviews] = useState([]);
     const [selected, setSelected] = useState(null);
@@ -114,12 +114,10 @@ function ReportContent() {
     const jobAssignment = candidate?.jobAssignments?.find(a => a.jobId === currentJobId) || candidate?.jobAssignments?.[0];
     const currentStatus = jobAssignment?.status || candidate?.jobStatus || 'interviewed';
 
-    const handleStatusUpdate = (newStatus) => {
+    const handleStatusUpdate = async (newStatus) => {
         if (!candidate || (!currentJobId && !jobAssignment)) return;
-        dispatch({
-            type: 'UPDATE_CANDIDATE_JOB_STATUS',
-            payload: { candidateId: candidate.id, jobId: currentJobId || jobAssignment.jobId, status: newStatus }
-        });
+        const jobId = currentJobId || jobAssignment.jobId;
+        await updateCandidateJobStatus(candidate.id, jobId, newStatus);
         alert(`Candidate ${newStatus} successfully!`);
     };
 
@@ -146,28 +144,38 @@ function ReportContent() {
                     </div>
                     {candidate && (currentJobId || jobAssignment) && (
                         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                            <button
-                                onClick={() => handleStatusUpdate('accepted')}
-                                disabled={currentStatus === 'accepted'}
-                                style={{
-                                    padding: '8px 16px', borderRadius: '8px', border: 'none', fontWeight: 600, cursor: 'pointer',
-                                    background: currentStatus === 'accepted' ? '#f0fdf4' : '#22c55e',
-                                    color: currentStatus === 'accepted' ? '#22c55e' : '#fff',
-                                    opacity: currentStatus === 'accepted' ? 0.7 : 1, transition: 'all 0.2s'
-                                }}>
-                                ✅ {currentStatus === 'accepted' ? 'Accepted' : 'Accept Candidate'}
-                            </button>
-                            <button
-                                onClick={() => handleStatusUpdate('rejected')}
-                                disabled={currentStatus === 'rejected'}
-                                style={{
-                                    padding: '8px 16px', borderRadius: '8px', border: 'none', fontWeight: 600, cursor: 'pointer',
-                                    background: currentStatus === 'rejected' ? '#fef2f2' : '#ef4444',
-                                    color: currentStatus === 'rejected' ? '#ef4444' : '#fff',
-                                    opacity: currentStatus === 'rejected' ? 0.7 : 1, transition: 'all 0.2s'
-                                }}>
-                                ❌ {currentStatus === 'rejected' ? 'Rejected' : 'Reject Candidate'}
-                            </button>
+                            {currentStatus !== 'rejected' && (
+                                <button
+                                    onClick={() => handleStatusUpdate('accepted')}
+                                    disabled={currentStatus === 'accepted'}
+                                    style={{
+                                        padding: '10px 20px', borderRadius: '10px', border: 'none', fontWeight: 700, cursor: 'pointer',
+                                        background: currentStatus === 'accepted' ? '#f0fdf4' : '#10b981',
+                                        color: currentStatus === 'accepted' ? '#10b981' : '#fff',
+                                        opacity: currentStatus === 'accepted' ? 0.8 : 1, transition: 'all 0.2s',
+                                        pointerEvents: currentStatus === 'accepted' ? 'none' : 'auto',
+                                        fontSize: '0.88rem',
+                                        boxShadow: currentStatus === 'accepted' ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.2)'
+                                    }}>
+                                    ✅ {currentStatus === 'accepted' ? 'Accepted' : 'Accept Candidate'}
+                                </button>
+                            )}
+                            {currentStatus !== 'accepted' && (
+                                <button
+                                    onClick={() => handleStatusUpdate('rejected')}
+                                    disabled={currentStatus === 'rejected'}
+                                    style={{
+                                        padding: '10px 20px', borderRadius: '10px', border: 'none', fontWeight: 700, cursor: 'pointer',
+                                        background: currentStatus === 'rejected' ? '#fef2f2' : '#ef4444',
+                                        color: currentStatus === 'rejected' ? '#ef4444' : '#fff',
+                                        opacity: currentStatus === 'rejected' ? 0.8 : 1, transition: 'all 0.2s',
+                                        pointerEvents: currentStatus === 'rejected' ? 'none' : 'auto',
+                                        fontSize: '0.88rem',
+                                        boxShadow: currentStatus === 'rejected' ? 'none' : '0 4px 12px rgba(239, 68, 68, 0.2)'
+                                    }}>
+                                    ❌ {currentStatus === 'rejected' ? 'Rejected' : 'Reject Candidate'}
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -198,17 +206,17 @@ function ReportContent() {
                 <h2 className={styles.sectionTitle}>💪 Strengths & Concerns</h2>
                 <div className={styles.swGrid}>
                     <div className={styles.glass}>
-                        <h3 style={{ color: 'var(--accent-success)', marginBottom: 12 }}>✅ Top Strengths</h3>
+                        <h3 style={{ color: '#10b981', marginBottom: 12, fontSize: '0.95rem', fontWeight: 700 }}>✅ Top Strengths</h3>
                         <ul className={styles.bulletList}>
                             {(report.top_strengths || []).map((s, i) => <li key={i}>{s}</li>)}
-                            {(!report.top_strengths || !report.top_strengths.length) && <li style={{ color: 'var(--text-muted)' }}>No data</li>}
+                            {(!report.top_strengths || !report.top_strengths.length) && <li style={{ color: '#94a3b8' }}>No data</li>}
                         </ul>
                     </div>
                     <div className={styles.glass}>
-                        <h3 style={{ color: 'var(--accent-danger)', marginBottom: 12 }}>⚠️ Concerns</h3>
+                        <h3 style={{ color: '#ef4444', marginBottom: 12, fontSize: '0.95rem', fontWeight: 700 }}>⚠️ Concerns</h3>
                         <ul className={styles.bulletList}>
                             {(report.major_concerns || []).map((c, i) => <li key={i}>{c}</li>)}
-                            {(!report.major_concerns || !report.major_concerns.length) && <li style={{ color: 'var(--text-muted)' }}>None flagged</li>}
+                            {(!report.major_concerns || !report.major_concerns.length) && <li style={{ color: '#94a3b8' }}>None flagged</li>}
                         </ul>
                     </div>
                 </div>
@@ -300,8 +308,8 @@ export default function CandidateReportPage() {
     return (
         <div className={styles.pageWrapper}>
             <Suspense fallback={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#1e293b' }}>
-                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#ffffff' }}>
+                    <div style={{ textAlign: 'center', color: '#64748b' }}>Loading report...</div>
                 </div>
             }>
                 <ReportContent />

@@ -73,7 +73,7 @@ export default function SetupPage() {
                 skillAnalysis,
                 includeCodingRound: includeCoding,
                 questionCount,
-                customQuestions: customQuestions.filter(q => q.trim().length > 0),
+                customQuestions: customQuestions.filter(q => q.trim().length > 0).map(q => ({ question: q, expectedAnswer: '', source: 'manual' })),
             };
             sessionStorage.setItem('hypereval_setup', JSON.stringify(interviewData));
 

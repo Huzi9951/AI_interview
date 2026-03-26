@@ -1,0 +1,17 @@
+--- VisionHire AI Verification ---
+Checking Supabase connection and tables...
+✅ Table "interviews" found.
+✅ Table "candidates" found.
+✅ Table "jobs" found.
+✅ Table "members" found.
+
+Checking other API keys...
+✅ Groq API Key found.
+✅ Deepgram API Key found.
+
+Checking SMTP configuration...
+Host: bom1plzcpnl502775.prod.bom1.secureserver.net
+Port: 465
+User: hr-assistant@hyperthinksys.in
+
+Done.

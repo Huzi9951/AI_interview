@@ -28,7 +28,11 @@ export async function POST(request) {
         const { createInterviewsBatch } = await import('@/lib/db');
         const data = await createInterviewsBatch(interviews);
         if (data) {
-            return Response.json({ success: true, count: data.length });
+            return Response.json({ 
+                success: true, 
+                count: data.length,
+                ids: data.map(i => i.id)
+            });
         }
         return Response.json({ error: 'Failed to create interviews' }, { status: 500 });
     } catch (err) {
