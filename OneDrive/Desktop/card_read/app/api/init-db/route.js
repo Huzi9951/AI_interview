@@ -1,3 +1,5 @@
+import { requireAuth } from '@/lib/auth';
+
 export const dynamic = 'force-dynamic';
 
 async function handleInit() {
@@ -78,12 +80,9 @@ async function handleInit() {
                 -- Migrations for existing tables
                 DO $$ 
                 BEGIN 
-                    -- Candidates table migrations
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='candidates' AND column_name='resume_text') THEN
                         ALTER TABLE candidates ADD COLUMN resume_text TEXT;
                     END IF;
-
-                    -- Interviews table migrations
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='interviews' AND column_name='resume_match_score') THEN
                         ALTER TABLE interviews ADD COLUMN resume_match_score INTEGER DEFAULT 0;
                     END IF;
@@ -99,10 +98,11 @@ async function handleInit() {
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='interviews' AND column_name='token_hash') THEN
                         ALTER TABLE interviews ADD COLUMN token_hash TEXT;
                     END IF;
-                    
-                    -- Jobs table migrations
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='saved_questions') THEN
                         ALTER TABLE jobs ADD COLUMN saved_questions JSONB DEFAULT '[]';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='members' AND column_name='assigned_candidates') THEN
+                        ALTER TABLE members ADD COLUMN assigned_candidates JSONB DEFAULT '{}';
                     END IF;
                 END $$;
 
@@ -114,7 +114,6 @@ async function handleInit() {
 
         if (error) {
             console.error('Init DB Error:', error);
-            // Fallback: suggest manual SQL if RPC fails
             return Response.json({
                 success: false,
                 message: 'Admin RPC "exec_sql" might be missing. Try running the SQL manually in Supabase Dashboard.',
@@ -129,9 +128,13 @@ async function handleInit() {
 }
 
 export async function GET() {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
     return handleInit();
 }
 
 export async function POST() {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
     return handleInit();
 }

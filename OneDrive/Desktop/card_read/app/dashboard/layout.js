@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { DashboardProvider } from '@/context/DashboardContext';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { DashboardProvider, useDashboard } from '@/context/DashboardContext';
+import { getSupabase } from '@/lib/supabaseBrowser';
 import styles from './dashboard.module.css';
 
 const navItems = [
@@ -11,8 +13,6 @@ const navItems = [
     { href: '/dashboard/candidates', icon: '👥', label: 'Candidates' },
     { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
 ];
-
-import { useDashboard } from '@/context/DashboardContext';
 
 function Sidebar() {
     const pathname = usePathname();
@@ -32,18 +32,25 @@ function Sidebar() {
         return true;
     });
 
+    const handleSignOut = async () => {
+        const supabase = getSupabase();
+        if (supabase) {
+            await supabase.auth.signOut();
+        }
+        window.location.href = '/';
+    };
+
     return (
         <aside className={styles.sidebar}>
             <div className={styles.sidebarHeader}>
                 <Link href="/dashboard" className={styles.sidebarLogo}>
                     <div className={styles.sidebarLogoIcon}>⚡</div>
-                    <span>{user.companyName || 'Hyper'}<span className={styles.sidebarLogoAccent}>{user.companyName ? '' : 'Eval'}</span></span>
+                    <span>Hyper<span className={styles.sidebarLogoAccent}>Eval</span></span>
                 </Link>
             </div>
 
             <nav className={styles.sidebarNav}>
                 {filteredNavItems.map(item => (
-
                     <Link
                         key={item.href}
                         href={item.href}
@@ -56,10 +63,10 @@ function Sidebar() {
 
                 <div className={styles.sidebarDivider} />
 
-                <Link href="/" className={styles.navItem}>
-                    <span className={styles.navIcon}>🌐</span>
-                    <span className={styles.navLabel}>View Career Page</span>
-                </Link>
+                <button onClick={handleSignOut} className={styles.navItem} style={{ border: 'none', background: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+                    <span className={styles.navIcon}>🚪</span>
+                    <span className={styles.navLabel}>Sign Out</span>
+                </button>
             </nav>
 
             <div className={styles.sidebarFooter}>
@@ -75,15 +82,64 @@ function Sidebar() {
     );
 }
 
+function AuthGate({ children }) {
+    const router = useRouter();
+    const [checking, setChecking] = useState(true);
+    const [authed, setAuthed] = useState(false);
+
+    useEffect(() => {
+        async function checkAuth() {
+            const supabase = getSupabase();
+            if (!supabase) {
+                router.replace('/');
+                return;
+            }
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.replace('/');
+                return;
+            }
+
+            setAuthed(true);
+            setChecking(false);
+        }
+        checkAuth();
+    }, [router]);
+
+    if (checking || !authed) {
+        return (
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                height: '100vh', background: '#0a0a1a', color: '#888',
+                fontFamily: 'Inter, sans-serif', fontSize: '0.95rem'
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: 32, height: 32, border: '3px solid #333',
+                        borderTopColor: '#e8604c', borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite', margin: '0 auto 16px'
+                    }} />
+                    Verifying session...
+                </div>
+            </div>
+        );
+    }
+
+    return children;
+}
+
 export default function DashboardLayout({ children }) {
     return (
-        <DashboardProvider>
-            <div className={styles.dashboardLayout}>
-                <Sidebar />
-                <main className={styles.mainContent}>
-                    {children}
-                </main>
-            </div>
-        </DashboardProvider>
+        <AuthGate>
+            <DashboardProvider>
+                <div className={styles.dashboardLayout}>
+                    <Sidebar />
+                    <main className={styles.mainContent}>
+                        {children}
+                    </main>
+                </div>
+            </DashboardProvider>
+        </AuthGate>
     );
 }

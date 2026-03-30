@@ -1,9 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// We need the service role key to bypass RLS for deletes, 
-// if it's not available, it'll try with anon key and might fail depending on RLS
-// User should add SUPABASE_SERVICE_ROLE_KEY to .env for best results.
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const supabase = supabaseUrl && supabaseKey
@@ -11,6 +9,9 @@ const supabase = supabaseUrl && supabaseKey
     : null;
 
 export async function POST(request) {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
+
     if (!supabase) {
         return Response.json({ error: 'Supabase credentials not configured' }, { status: 500 });
     }

@@ -188,7 +188,7 @@ function ReportContent() {
                     <div className={styles.scoreLabel}>/ 100</div>
                 </div>
                 <div className={styles.recBadge} data-rec={selected.hire_recommendation?.toLowerCase()?.replace(/\s+/g, '-')}>
-                    {selected.hire_recommendation === 'Strong Yes' ? '🌟' : selected.hire_recommendation === 'Yes' ? '✅' : selected.hire_recommendation === 'Maybe' ? '🤔' : '❌'}
+                    {selected.hire_recommendation?.toLowerCase()?.includes('strong yes') ? '🌟' : selected.hire_recommendation?.toLowerCase()?.includes('yes') ? '✅' : selected.hire_recommendation?.toLowerCase()?.includes('maybe') ? '🤔' : '❌'}
                     {' '}{selected.hire_recommendation || 'Pending'}
                 </div>
             </div>

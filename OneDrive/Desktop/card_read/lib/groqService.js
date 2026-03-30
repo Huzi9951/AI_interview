@@ -1,20 +1,38 @@
-import Groq from 'groq-sdk';
+/**
+ * Groq AI Service — works both client-side (via /api/ai proxy) and server-side (direct API).
+ * The API key is NEVER exposed to the browser.
+ */
 
 let groqClient = null;
 
-function getGroq() {
+async function getGroq() {
+    if (typeof window !== 'undefined') return null; // Browser: use proxy
     if (!groqClient) {
-        const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+        const { default: Groq } = await import('groq-sdk');
+        const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
-            throw new Error('NEXT_PUBLIC_GROQ_API_KEY is not set. Please add it to .env.local');
+            throw new Error('GROQ_API_KEY is not set. Please add it to your environment variables.');
         }
-        groqClient = new Groq({ apiKey, dangerouslyAllowBrowser: true });
+        groqClient = new Groq({ apiKey });
     }
     return groqClient;
 }
 
 async function chatCompletion(messages, temperature = 0.7) {
-    const groq = getGroq();
+    if (typeof window !== 'undefined') {
+        // Client-side: proxy through server API route
+        const res = await fetch('/api/ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'chat', messages, temperature }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'AI request failed');
+        return data.result;
+    }
+
+    // Server-side: direct Groq API call
+    const groq = await getGroq();
     const response = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages,
@@ -26,7 +44,18 @@ async function chatCompletion(messages, temperature = 0.7) {
 }
 
 async function chatCompletionText(messages, temperature = 0.7) {
-    const groq = getGroq();
+    if (typeof window !== 'undefined') {
+        const res = await fetch('/api/ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'chatText', messages, temperature }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'AI request failed');
+        return data.result;
+    }
+
+    const groq = await getGroq();
     const response = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages,
@@ -125,7 +154,6 @@ Fill in all details completely. Be robust and realistic for a modern hiring pipe
             content: `USER PROMPT:\n${promptText}`
         }
     ];
-    // Slightly higher temperature for generation vs parsing
     return await chatCompletion(messages, 0.6);
 }
 
@@ -258,18 +286,11 @@ Return JSON: { "questions": [{ "question": "text", "target_skill": "skill being 
 // 3) Evaluate Answer
 // =============================================
 export async function evaluateAnswer(question, answer, context) {
-    // If marked as not JD-relevant, skip grading
     if (context.isJDRelevant === false) {
         return {
-            score: null,
-            technical_depth: null,
-            clarity: null,
-            relevance: null,
-            confidence_estimate: null,
-            strengths: [],
-            weaknesses: [],
-            follow_up_needed: false,
-            follow_up_reason: '',
+            score: null, technical_depth: null, clarity: null, relevance: null,
+            confidence_estimate: null, strengths: [], weaknesses: [],
+            follow_up_needed: false, follow_up_reason: '',
             detailed_feedback: 'This question was not graded as it is not directly relevant to the job description.',
             graded: false,
         };
@@ -298,9 +319,8 @@ IMPORTANT: If the question being evaluated is ALREADY a follow-up question, you 
 
 Return JSON with this EXACT structure (if graded is false, scores can be null):
 {
-  "score": 0-10, // or null if graded is false
-  "graded": true/false, // true for AI-generated questions or custom questions WITH expected answers. false for custom questions WITHOUT expected answers.
-  "technical_depth": 0-10,
+  "score": 0-10,
+  "graded": true/false,
   "technical_depth": 0-10,
   "clarity": 0-10,
   "relevance": 0-10,
@@ -386,13 +406,8 @@ Return JSON:
 // =============================================
 export async function generateFinalReport(interviewData) {
     const {
-        skillAnalysis,
-        questions,
-        answers,
-        evaluations,
-        violations,
-        codingEvaluation,
-        includeCodingRound,
+        skillAnalysis, questions, answers, evaluations,
+        violations, codingEvaluation, includeCodingRound,
     } = interviewData;
 
     let interviewTranscript = '';

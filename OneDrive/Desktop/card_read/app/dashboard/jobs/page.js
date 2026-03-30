@@ -8,7 +8,7 @@ import AnalysisModal from '@/components/AnalysisModal';
 import styles from './jobs.module.css';
 
 export default function JobsPage() {
-    const { state, dispatch, unassignFromJob, assignToJob, updateMatchScore, deleteJob, toggleJobStatus, updateCandidateJobStatus } = useDashboard();
+    const { state, dispatch, unassignFromJob, assignToJob, updateMatchScore, deleteJob, toggleJobStatus, updateCandidateJobStatus, updateJobQuestions } = useDashboard();
     const user = state.user || {};
     const role = user.role || 'ADMIN';
     const [selectedJob, setSelectedJob] = useState(null);
@@ -36,7 +36,7 @@ export default function JobsPage() {
     const [assignSelection, setAssignSelection] = useState(new Set());
 
     // Invite modal state (with question preview)
-    const [inviteCandidate, setInviteCandidate] = useState(null);
+    const [inviteCandidates, setInviteCandidates] = useState([]);
     const [inviteExpiryHours, setInviteExpiryHours] = useState(48);
     const [inviteStep, setInviteStep] = useState(1); // 1=settings, 2=custom questions, 3=preview, 4=sending
     const [inviteQuestions, setInviteQuestions] = useState([{ question: '', expectedAnswer: '' }]);
@@ -44,6 +44,7 @@ export default function JobsPage() {
     const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
     const [inviteSending, setInviteSending] = useState(false);
     const [isDeletingJob, setIsDeletingJob] = useState(false);
+    const [bulkSelection, setBulkSelection] = useState(new Set());
 
     const [toast, setToast] = useState('');
 
@@ -96,7 +97,7 @@ export default function JobsPage() {
         setAssignSelection(new Set());
     };
 
-    // â”€â”€ Open single invite modal (with question preview) â”€â”€
+    // ── Open single invite modal (with question preview) ──
     const openInviteFor = (candidate) => {
         if (candidate.jobStatus === 'invited') {
             if (!confirm(`An invite was already sent to ${candidate.name || candidate.email} for this role. Are you sure you want to send another one?`)) {
@@ -104,7 +105,7 @@ export default function JobsPage() {
             }
         }
 
-        setInviteCandidate(candidate);
+        setInviteCandidates([candidate]);
         setInviteExpiryHours(48);
         setInviteStep(1);
         setInviteQuestions([{ question: '', expectedAnswer: '' }]);
@@ -112,24 +113,50 @@ export default function JobsPage() {
         setShowInviteModal(true);
     };
 
+    const handleBulkInvite = () => {
+        if (bulkSelection.size === 0) return;
+        const selected = jobCandidates.filter(c => bulkSelection.has(c.id));
+        setInviteCandidates(selected);
+        setInviteExpiryHours(48);
+        setInviteStep(1);
+        setInviteQuestions([{ question: '', expectedAnswer: '' }]);
+        setPreviewQuestions([]);
+        setShowInviteModal(true);
+    };
+
+    const toggleBulkSelection = (id) => {
+        setBulkSelection(prev => {
+            const n = new Set(prev);
+            n.has(id) ? n.delete(id) : n.add(id);
+            return n;
+        });
+    };
+
     // ── Generate AI questions for preview ──
-    const generateQuestionsForPreview = async () => {
+    const generateQuestionsForPreview = async (forceRegenerate = false) => {
         if (!selectedJob) return;
 
-        // Check if any candidate has already been invited to this job with custom questions
-        let existingQuestions = null;
-        for (const c of state.candidates) {
-            const assignment = c.jobAssignments?.find(a => a.jobId === selectedJob.id);
-            if (assignment && assignment.customQuestions && assignment.customQuestions.length > 0) {
-                existingQuestions = assignment.customQuestions;
-                break;
+        if (!forceRegenerate) {
+            // Check if any candidate has already been invited to this job with custom questions
+            let existingQuestions = null;
+            let latestUpdated = null;
+            
+            for (const c of state.candidates) {
+                const assignment = c.jobAssignments?.find(a => a.jobId === selectedJob.id);
+                if (assignment && assignment.customQuestions && assignment.customQuestions.length > 0) {
+                    const updatedAt = new Date(assignment.updatedAt || assignment.assignedAt || 0).getTime();
+                    if (!latestUpdated || updatedAt > latestUpdated) {
+                        existingQuestions = assignment.customQuestions;
+                        latestUpdated = updatedAt;
+                    }
+                }
             }
-        }
 
-        if (existingQuestions) {
-            setPreviewQuestions(existingQuestions);
-            showToast('✓ Loaded saved AI questions for this job.');
-            return;
+            if (existingQuestions) {
+                setPreviewQuestions(existingQuestions);
+                showToast('✓ Loaded saved AI questions for this job.');
+                return;
+            }
         }
 
         setIsGeneratingQuestions(true);
@@ -148,7 +175,13 @@ export default function JobsPage() {
                 target_skill: '',
                 source: 'manual',
             }));
-            setPreviewQuestions([...manualQs, ...aiQuestions]);
+            const newQuestions = [...manualQs, ...aiQuestions];
+            setPreviewQuestions(newQuestions);
+            
+            if (forceRegenerate) {
+                await updateJobQuestions(selectedJob.id, newQuestions);
+                showToast('✓ AI Questions regenerated and saved for this job.');
+            }
         } catch (err) {
             console.error('Failed to generate questions:', err);
             showToast('⚠️ Failed to generate AI questions.');
@@ -159,6 +192,10 @@ export default function JobsPage() {
                 source: 'manual',
             }));
             setPreviewQuestions(manualQs);
+            
+            if (forceRegenerate) {
+                await updateJobQuestions(selectedJob.id, manualQs);
+            }
         }
         setIsGeneratingQuestions(false);
     };
@@ -173,15 +210,20 @@ export default function JobsPage() {
 
     // ── Send invite via API ──
     const handleSendInvite = async () => {
-        if (!inviteCandidate || !selectedJob) return;
+        if (inviteCandidates.length === 0 || !selectedJob) return;
 
-        // Optimistic UI updates
+        // Optimistic UX feedback (backend handles true sync)
         setShowInviteModal(false);
-        showToast(`✓ Sending invite to ${inviteCandidate.name || inviteCandidate.email} in the background...`);
+        const inviteCount = inviteCandidates.length;
+        showToast(`✓ Sending invites to ${inviteCount} candidate(s)...`);
+        
+        setBulkSelection(new Set()); // clear selection
 
-        dispatch({
-            type: 'UPDATE_CANDIDATE_JOB_STATUS',
-            payload: { candidateId: inviteCandidate.id, jobId: selectedJob.id, status: 'invited' },
+        inviteCandidates.forEach(c => {
+            dispatch({
+                type: 'UPDATE_CANDIDATE_JOB_STATUS',
+                payload: { candidateId: c.id, jobId: selectedJob.id, status: 'invited' },
+            });
         });
 
         const questionsPayload = previewQuestions.map(q => ({
@@ -194,12 +236,12 @@ export default function JobsPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                candidates: [{ 
-                    email: inviteCandidate.email, 
-                    name: inviteCandidate.name,
-                    resumeText: inviteCandidate.resumeText || '',
-                    matchScore: inviteCandidate.matchScore || 0,
-                }],
+                candidates: inviteCandidates.map(c => ({ 
+                    email: c.email, 
+                    name: c.name || '',
+                    resumeText: c.resumeText || '',
+                    matchScore: c.matchScore || 0,
+                })),
                 jobTitle: selectedJob.title,
                 jobId: selectedJob.id,
                 jobDescription: selectedJob.description || '',
@@ -209,11 +251,13 @@ export default function JobsPage() {
             }),
         }).then(res => res.json()).then(data => {
             if (data.success) {
-                console.log(`✓ Invite sent to ${inviteCandidate.name || inviteCandidate.email}!`);
+                showToast(`✓ Invites successfully processed for ${inviteCount} candidate(s).`);
             } else {
-                console.error(`⚠️ Failed: ${data.error || 'Unknown error'}`);
+                showToast(`⚠️ Failed to process invites. Please try again.`);
             }
-        }).catch(err => console.error(`⚠️ Error sending invite: ${err.message}`));
+        }).catch(err => {
+            showToast(`⚠️ Network error occurred while sending invites.`);
+        });
     };
 
     const handleStatusUpdate = async (candidateId, newStatus) => {
@@ -308,6 +352,7 @@ export default function JobsPage() {
                                                 const success = await deleteJob(selectedJob.id);
                                                 if (success) {
                                                     setSelectedJob(null);
+                                                    setBulkSelection(new Set()); // clear
                                                     showToast('Job and all associated data deleted completely');
                                                 } else {
                                                     showToast('Failed to wipe all associated Job data.');
@@ -364,14 +409,24 @@ export default function JobsPage() {
                             {activeTab === 'candidates' && (
                                 <>
                                     <div className={styles.candidatesToolbar}>
-                                        {role === 'ADMIN' && (
-                                            <button className={styles.assignBtn} onClick={() => { setAssignSelection(new Set()); setShowAssignModal(true); }}>
-                                                + Assign Candidates
-                                            </button>
-                                        )}
+                                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                            {role === 'ADMIN' && (
+                                                <button className={styles.assignBtn} onClick={() => { setAssignSelection(new Set()); setShowAssignModal(true); }}>
+                                                    + Assign Candidates
+                                                </button>
+                                            )}
+                                            {role === 'ADMIN' && bulkSelection.size > 0 && (
+                                                <button className={styles.assignBtn} style={{ background: '#6366f1' }} onClick={handleBulkInvite}>
+                                                    📤 Bulk Invite ({bulkSelection.size})
+                                                </button>
+                                            )}
+                                        </div>
                                         <select
                                             value={statusFilter}
-                                            onChange={e => setStatusFilter(e.target.value)}
+                                            onChange={e => {
+                                                setStatusFilter(e.target.value);
+                                                setBulkSelection(new Set());
+                                            }}
                                             style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e8e8ef', fontSize: '0.85rem', color: '#1a1a2e', outline: 'none' }}
                                         >
                                             <option value="all">All Statuses</option>
@@ -393,6 +448,17 @@ export default function JobsPage() {
                                             <table className={styles.cTable}>
                                                 <thead>
                                                     <tr>
+                                                        {role === 'ADMIN' && (
+                                                            <th style={{ width: 40 }}>
+                                                                <input type="checkbox" className={styles.modalCheckbox}
+                                                                    checked={jobCandidates.length > 0 && bulkSelection.size === jobCandidates.length}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) setBulkSelection(new Set(jobCandidates.map(c => c.id)));
+                                                                        else setBulkSelection(new Set());
+                                                                    }} 
+                                                                />
+                                                            </th>
+                                                        )}
                                                         <th>Candidate</th>
                                                         {role === 'ADMIN' && <th>Contact</th>}
                                                         {role === 'ADMIN' && <th>Match Score</th>}
@@ -403,6 +469,14 @@ export default function JobsPage() {
                                                 <tbody>
                                                     {jobCandidates.map(c => (
                                                         <tr key={c.id}>
+                                                            {role === 'ADMIN' && (
+                                                                <td>
+                                                                    <input type="checkbox" className={styles.modalCheckbox}
+                                                                        checked={bulkSelection.has(c.id)}
+                                                                        onChange={() => toggleBulkSelection(c.id)} 
+                                                                    />
+                                                                </td>
+                                                            )}
                                                             <td>
                                                                 <div className={styles.cName}>{c.name || '—'}</div>
                                                                 {c.designation && <div className={styles.cRole}>{c.designation}</div>}
@@ -558,7 +632,7 @@ export default function JobsPage() {
             )}
 
             {/* — Send Invite Modal (with Question Preview) — */}
-            {showInviteModal && inviteCandidate && selectedJob && (
+            {showInviteModal && inviteCandidates.length > 0 && selectedJob && (
                 <div className={styles.modalOverlay} onClick={() => setShowInviteModal(false)}>
                     <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 580 }}>
                         <div className={styles.modalHeader}>
@@ -570,7 +644,7 @@ export default function JobsPage() {
                                     {inviteStep === 4 && 'Sending...'}
                                 </h2>
                                 <p className={styles.modalSubtitle}>
-                                    to <strong>{inviteCandidate.name || inviteCandidate.email}</strong> for <strong>{selectedJob.title}</strong>
+                                    to <strong>{inviteCandidates.length > 1 ? `${inviteCandidates.length} candidates` : inviteCandidates[0].name || inviteCandidates[0].email}</strong> for <strong>{selectedJob.title}</strong>
                                     {inviteStep < 4 && ` • Step ${inviteStep} of 3`}
                                 </p>
                             </div>
@@ -703,7 +777,7 @@ export default function JobsPage() {
                                                     + Add Question
                                                 </button>
                                                 <button className={styles.modalAddQuestion}
-                                                    onClick={generateQuestionsForPreview}
+                                                    onClick={() => generateQuestionsForPreview(true)}
                                                     style={{ background: '#eef2ff', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
                                                     🔄 Regenerate AI Questions
                                                 </button>
@@ -712,7 +786,7 @@ export default function JobsPage() {
                                             <div className={styles.invitePreview} style={{ marginTop: 16 }}>
                                                 <div className={styles.invitePreviewIcon}>📤</div>
                                                 <div>
-                                                    <strong>To:</strong> {inviteCandidate.email}<br />
+                                                    <strong>To:</strong> {inviteCandidates.length > 1 ? `${inviteCandidates.length} Selected Candidates` : inviteCandidates[0].email}<br />
                                                     <strong>Expiry:</strong> {inviteExpiryHours} hours<br />
                                                     <strong>Questions:</strong> {previewQuestions.length} ({previewQuestions.filter(q => q.source === 'ai').length} AI + {previewQuestions.filter(q => q.source === 'manual').length} manual)
                                                 </div>

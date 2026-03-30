@@ -1,6 +1,11 @@
+import { requireAuth } from '@/lib/auth';
+import { signToken } from '@/lib/tokenService';
 import nodemailer from 'nodemailer';
 
 export async function POST(request) {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN', 'TEAM_MEMBER'] });
+    if (authError) return authError;
+
     try {
         const body = await request.json();
         const { candidates, jobTitle, jobId, jobDescription, companyName, expiryHours, customQuestions, questionCount } = body;
@@ -15,7 +20,7 @@ export async function POST(request) {
             host: process.env.SMTP_HOST,
             port: Number(process.env.SMTP_PORT),
             secure: process.env.SMTP_SECURE === 'true',
-            pool: true, // Use connection pooling for high-volume sending
+            pool: true,
             maxConnections: 10,
             maxMessages: 100,
             auth: {
@@ -23,13 +28,12 @@ export async function POST(request) {
                 pass: process.env.SMTP_PASSWORD,
             },
             tls: {
-                rejectUnauthorized: false,
+                rejectUnauthorized: process.env.NODE_ENV === 'production',
             },
         });
 
         const origin = request.headers.get('origin') || request.headers.get('referer')?.replace(/\/api.*/, '') || 'http://localhost:3000';
 
-        // 1. Prepare all token data and HTML content concurrently
         const interviewRecordsToInsert = [];
         const emailPromises = candidates.map(candidate => {
             return new Promise(async (resolve) => {
@@ -46,11 +50,11 @@ export async function POST(request) {
                         createdAt: Date.now(),
                     };
 
-                    const token = Buffer.from(JSON.stringify(tokenData)).toString('base64url');
-                    const inviteLink = `${origin}/accept?token=${token}`;
+                    // HMAC-signed token instead of raw base64
+                    const token = signToken(tokenData);
+                    const inviteLink = `${origin}/accept?token=${encodeURIComponent(token)}`;
                     const tokenHash = Buffer.from(candidate.email + ':' + jobTitle + ':' + tokenData.createdAt).toString('base64').replace(/[^a-zA-Z0-9]/g, '');
 
-                    // Add to batch insert array
                     interviewRecordsToInsert.push({
                         candidateEmail: candidate.email,
                         candidateName: candidate.name || '',
@@ -62,7 +66,7 @@ export async function POST(request) {
                         resumeMatchScore: candidate.matchScore || 0,
                     });
 
-                     const html = `
+                    const html = `
                     <!DOCTYPE html>
                     <html>
                     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
@@ -71,7 +75,6 @@ export async function POST(request) {
                                 <h1 style="color: #e8604c; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em;">Hyper<span style="color: #1a1a2e;">Eval</span></h1>
                                 <p style="color: #64748b; margin: 4px 0 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">AI-Powered Interview Platform</p>
                             </div>
-                            
                             <div style="margin-bottom: 32px;">
                                 <p style="font-size: 18px; color: #1a1a2e; font-weight: 700; margin-bottom: 16px;">Hi ${candidate.name || 'there'},</p>
                                 <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 16px;">
@@ -89,21 +92,15 @@ export async function POST(request) {
                                     </p>
                                 </div>
                             </div>
-
                             <div style="text-align: center; margin-bottom: 32px;">
                                 <a href="${inviteLink}" style="display: inline-block; background: linear-gradient(135deg, #e8604c, #f0845e); color: #ffffff; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 16px; box-shadow: 0 10px 20px rgba(232, 96, 76, 0.2);">
                                     Accept & Start Interview →
                                 </a>
                             </div>
-
                             <div style="border-top: 1px solid #f1f5f9; padding-top: 24px; text-align: center;">
                                 <p style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
                                     For the best experience, please use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong>.<br/>
                                     Ensure you have a stable internet connection and a working camera/microphone.
-                                </p>
-                                <p style="font-size: 12px; color: #cbd5e1; margin-top: 16px;">
-                                    If the button doesn't work, copy this link:<br/>
-                                    <a href="${inviteLink}" style="color: #e8604c; text-decoration: underline;">${inviteLink}</a>
                                 </p>
                             </div>
                         </div>
@@ -122,7 +119,7 @@ export async function POST(request) {
                         html,
                     });
 
-                    resolve({ email: candidate.email, success: true, inviteLink });
+                    resolve({ email: candidate.email, success: true });
                 } catch (err) {
                     console.error(`Failed to send to ${candidate.email}:`, err.message);
                     resolve({ email: candidate.email, success: false, error: err.message });
@@ -130,11 +127,9 @@ export async function POST(request) {
             });
         });
 
-        // 2. Execute all emails in parallel
         const resultsArray = await Promise.allSettled(emailPromises);
         const results = resultsArray.map(r => r.value);
 
-        // 3. Batch insert pending records into Supabase to save DB rounds
         if (interviewRecordsToInsert.length > 0) {
             try {
                 const { createInterviewsBatch } = await import('@/lib/db.js');

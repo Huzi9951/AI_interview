@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabase } from '@/lib/supabaseBrowser';
 import styles from './page.module.css';
 
 export default function AuthPage() {
@@ -24,10 +24,11 @@ export default function AuthPage() {
       return;
     }
 
+    const supabase = getSupabase();
+
     if (!supabase) {
-      // Environment without Supabase credentials - bypass auth for demo purposes
-      console.warn('Supabase not configured. Bypassing auth for demo.');
-      router.push('/dashboard');
+      setError('Authentication service is not configured. Please contact the administrator.');
+      setLoading(false);
       return;
     }
 
@@ -40,13 +41,10 @@ export default function AuthPage() {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
 
-        // Supabase returns data.user with identities if it was successful.
-        // If the server requires email confirmation, session will be null.
         if (data.user && data.session === null) {
           setError('Account created! Please check your email for a confirmation link before signing in.');
-          setIsLogin(true); // Switch to login view for when they come back
+          setIsLogin(true);
         } else {
-          // Auto confirmed or email confirmations are turned off in Supabase settings
           router.push('/dashboard');
         }
       }

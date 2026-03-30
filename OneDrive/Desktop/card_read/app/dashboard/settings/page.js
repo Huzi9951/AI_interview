@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import styles from './settings.module.css';
 import { useDashboard } from '@/context/DashboardContext';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabase } from '@/lib/supabaseBrowser';
 
 
 export default function SettingsPage() {
@@ -22,6 +22,7 @@ export default function SettingsPage() {
     const [inviteEmail, setInviteEmail] = useState('');
     const [inviteRole, setInviteRole] = useState('TEAM_MEMBER'); // TEAM_MEMBER | CLIENT
     const [selectedJobs, setSelectedJobs] = useState([]);
+    const [assignedCandidates, setAssignedCandidates] = useState({}); // { jobId: [email1, email2] }
     const [isInviting, setIsInviting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [members, setMembers] = useState([]);
@@ -67,7 +68,7 @@ export default function SettingsPage() {
 
     const handleInvite = async () => {
         if (!inviteEmail) {
-            showToast('⚠ Please enter an email address.');
+            showToast('⚠ Please enter at least one email address.');
             return;
         }
         if (inviteRole === 'CLIENT' && selectedJobs.length === 0) {
@@ -76,29 +77,53 @@ export default function SettingsPage() {
         }
 
         setIsInviting(true);
-        try {
-            const res = await fetch('/api/invite-member', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: inviteName,
-                    email: inviteEmail,
-                    role: inviteRole,
-                    jobIds: selectedJobs,
-                    companyName: profile.companyName || 'HyperEval'
-                })
-            });
+        
+        const emails = inviteEmail.split(',').map(e => e.trim()).filter(e => e);
+        if (emails.length === 0) {
+            showToast('⚠ No valid emails found.');
+            setIsInviting(false);
+            return;
+        }
 
-            const data = await res.json();
-            if (data.success) {
-                showToast(`✓ Invitation sent to ${inviteEmail}`);
+        let successCount = 0;
+        let failCount = 0;
+
+        try {
+            await Promise.all(emails.map(async (email) => {
+                const res = await fetch('/api/invite-member', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: emails.length > 1 ? '' : inviteName, // Don't use same name for bulk
+                        email: email,
+                        role: inviteRole,
+                        jobIds: selectedJobs,
+                        assignedCandidates: inviteRole === 'CLIENT' ? assignedCandidates : {},
+                        companyName: profile.companyName || 'HyperEval'
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                    console.error(`Failed to invite ${email}:`, data.error);
+                }
+            }));
+
+            if (successCount > 0 && failCount === 0) {
+                showToast(`✓ Invitation sent to ${successCount} user(s)`);
                 setInviteEmail('');
                 setInviteName('');
                 setSelectedJobs([]);
-                fetchMembers(); // Refresh the list
+                setAssignedCandidates({});
+            } else if (successCount > 0 && failCount > 0) {
+                showToast(`⚠ Sent to ${successCount}, but ${failCount} failed.`);
             } else {
-                showToast(`⚠ ${data.error || 'Failed to send invitation'}`);
+                showToast(`⚠ Failed to send invitations.`);
             }
+            fetchMembers(); // Refresh the list
         } catch (err) {
             showToast(`⚠ Error: ${err.message}`);
         } finally {
@@ -225,11 +250,11 @@ export default function SettingsPage() {
                         </div>
 
                         <div className={styles.inviteGroup}>
-                            <label className={styles.label}>Email Address</label>
+                            <label className={styles.label}>Email Address(es)</label>
                             <input 
-                                type="email" 
+                                type="text" 
                                 className={styles.inviteInput} 
-                                placeholder="name@company.com"
+                                placeholder="name1@company.com, name2@company.com"
                                 value={inviteEmail}
                                 onChange={(e) => setInviteEmail(e.target.value)}
                             />
@@ -257,22 +282,65 @@ export default function SettingsPage() {
                             <div className={styles.inviteGroup}>
                                 <label className={styles.label}>Assigned Jobs</label>
                                 <div className={styles.jobList}>
-                                    {state.jobs.map(job => (
-                                        <label key={job.id} className={styles.jobOption}>
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selectedJobs.includes(job.id)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setSelectedJobs([...selectedJobs, job.id]);
-                                                    } else {
-                                                        setSelectedJobs(selectedJobs.filter(id => id !== job.id));
-                                                    }
-                                                }}
-                                            />
-                                            <span className={styles.jobName}>{job.title}</span>
-                                        </label>
-                                    ))}
+                                    {state.jobs.map(job => {
+                                        const isJobSelected = selectedJobs.includes(job.id);
+                                        const jobCandidates = state.candidates.filter(c => c.jobAssignments?.some(a => a.jobId === job.id));
+                                        const assignedToJob = assignedCandidates[job.id] || [];
+
+                                        return (
+                                        <div key={job.id} className={styles.jobOptionWrapper}>
+                                            <label className={styles.jobOption}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={isJobSelected}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedJobs([...selectedJobs, job.id]);
+                                                            // Auto-select all candidates when job is checked
+                                                            setAssignedCandidates({...assignedCandidates, [job.id]: jobCandidates.map(c => c.email)});
+                                                        } else {
+                                                            setSelectedJobs(selectedJobs.filter(id => id !== job.id));
+                                                            const newAssigned = {...assignedCandidates};
+                                                            delete newAssigned[job.id];
+                                                            setAssignedCandidates(newAssigned);
+                                                        }
+                                                    }}
+                                                />
+                                                <span className={styles.jobName}>{job.title}</span>
+                                            </label>
+
+                                            {isJobSelected && (
+                                                <div className={styles.candidateSubList}>
+                                                    {jobCandidates.length === 0 ? (
+                                                        <div className={styles.noCandidatesWarning}>No candidates assigned to this job yet.</div>
+                                                    ) : (
+                                                        <>
+                                                            <div className={styles.candidateSubListHeader}>
+                                                                Select candidates to share:
+                                                            </div>
+                                                            {jobCandidates.map(c => (
+                                                                <label key={c.id} className={styles.candidateOption}>
+                                                                    <input 
+                                                                        type="checkbox"
+                                                                        checked={assignedToJob.includes(c.email)}
+                                                                        onChange={(e) => {
+                                                                            const currentList = assignedCandidates[job.id] || [];
+                                                                            if (e.target.checked) {
+                                                                                setAssignedCandidates({...assignedCandidates, [job.id]: [...currentList, c.email]});
+                                                                            } else {
+                                                                                setAssignedCandidates({...assignedCandidates, [job.id]: currentList.filter(email => email !== c.email)});
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <span className={styles.candidateOptionName}>{c.name || c.email}</span>
+                                                                </label>
+                                                            ))}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )})}
                                     {state.jobs.length === 0 && (
                                         <div className={styles.noJobs}>No jobs found. Create some jobs first.</div>
                                     )}

@@ -24,32 +24,35 @@ function AcceptContent() {
             }
 
             try {
-                const decoded = JSON.parse(atob(token.replace(/-/g, '+').replace(/_/g, '/')));
-                setTokenData(decoded);
+                // Verify token server-side (HMAC signature check)
+                const res = await fetch('/api/verify-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token }),
+                });
+                const result = await res.json();
 
-                if (decoded.expiresAt && Date.now() > decoded.expiresAt) {
-                    setExpired(true);
+                if (!res.ok) {
+                    if (result.expired) {
+                        setExpired(true);
+                    } else {
+                        setError(result.error || 'Invalid invitation token. Please contact the recruiter.');
+                    }
                     setChecking(false);
                     return;
                 }
 
-                // Check if this interview was already taken
-                const tokenHash = btoa(decoded.email + ':' + decoded.jobTitle + ':' + decoded.createdAt).replace(/[^a-zA-Z0-9]/g, '');
-                try {
-                    const { hasCompletedInterview } = await import('@/lib/db');
-                    const completed = await hasCompletedInterview(tokenHash);
-                    if (completed) {
-                        setAlreadyDone(true);
-                        setChecking(false);
-                        return;
-                    }
-                } catch (e) {
-                    console.warn('DB check skipped:', e);
+                setTokenData(result.data);
+
+                if (result.alreadyDone) {
+                    setAlreadyDone(true);
+                    setChecking(false);
+                    return;
                 }
 
                 setChecking(false);
             } catch (e) {
-                setError('Invalid invitation token. Please contact the recruiter.');
+                setError('Failed to verify invitation. Please try again later.');
                 setChecking(false);
             }
         }
@@ -60,7 +63,6 @@ function AcceptContent() {
         if (!tokenData) return;
         setAccepting(true);
 
-        // Navigate directly to interview page with the token
         const token = searchParams.get('token');
         router.push(`/interview?token=${encodeURIComponent(token)}`);
     };
@@ -150,7 +152,7 @@ function AcceptContent() {
             <div className={styles.card}>
                 <div className={styles.logo}>
                     <span className={styles.logoDot} />
-                    <span className={styles.logoText}>Hyper<span className={styles.logoHighlight}>Hire</span></span>
+                    <span className={styles.logoText}>Hyper<span className={styles.logoHighlight}>Eval</span></span>
                 </div>
 
                 <h1 className={styles.title}>Interview Invitation</h1>

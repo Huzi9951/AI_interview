@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { adminSupabase } from '@/lib/supabaseClient';
+import { requireAuth } from '@/lib/auth';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
 export async function GET() {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
+
     try {
         if (!adminSupabase) {
             return NextResponse.json({ success: false, error: 'Supabase Admin is not configured' }, { status: 500 });
@@ -25,8 +29,11 @@ export async function GET() {
 }
 
 export async function POST(req) {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
+
     try {
-        const { email, role, jobIds, companyName, name } = await req.json();
+        const { email, role, jobIds, assignedCandidates, companyName, name } = await req.json();
 
         if (!email || !role) {
             return NextResponse.json({ success: false, error: 'Email and role are required' }, { status: 400 });
@@ -84,6 +91,7 @@ export async function POST(req) {
             user_metadata: { 
                 role, 
                 assigned_jobs: jobIds || [],
+                assigned_candidates: assignedCandidates || {},
                 company_name: companyName,
                 name: name || ''
             }
@@ -108,6 +116,7 @@ export async function POST(req) {
                 role: role,
                 name: name || '',
                 assigned_jobs: jobIds || [],
+                assigned_candidates: assignedCandidates || {},
                 invited_at: new Date().toISOString()
             }, { onConflict: 'email' });
 

@@ -384,3 +384,55 @@
     color: #059669;
     border: 1px solid #d1fae5;
 }
+
+/* Candidate Sublist Styles */
+.jobOptionWrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #eee;
+}
+
+.jobOptionWrapper:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.candidateSubList {
+    margin-left: 28px;
+    padding: 10px 12px;
+    background: #fbfbfb;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.candidateSubListHeader {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.candidateOption {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.candidateOptionName {
+    font-size: 0.85rem;
+    color: #444;
+}
+
+.noCandidatesWarning {
+    font-size: 0.8rem;
+    color: #999;
+    font-style: italic;
+}

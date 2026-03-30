@@ -33,18 +33,17 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# vercel
+# deployment
 .vercel
+
+# GCP / Docker
+.gcloudignore
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-.env*.local
-
 # Playwright
-node_modules/
 /test-results/
 /playwright-report/
 /blob-report/

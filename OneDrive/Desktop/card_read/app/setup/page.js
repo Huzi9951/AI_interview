@@ -118,7 +118,7 @@ export default function SetupPage() {
             <header className={styles.header}>
                 <Link href="/" className={styles.logo}>
                     <div className={styles.logoIcon}>⚡</div>
-                    <span>Hyper<span className={styles.logoGradient}>Hire</span></span>
+                    <span>Hyper<span className={styles.logoGradient}>Eval</span></span>
                 </Link>
                 <div className={styles.stepBadge}>📋 Step 1: Setup</div>
             </header>

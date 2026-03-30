@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 export async function POST(req) {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
+
     try {
         const { jobId } = await req.json();
 

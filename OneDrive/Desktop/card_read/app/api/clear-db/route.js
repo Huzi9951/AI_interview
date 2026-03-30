@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { adminSupabase } from '@/lib/supabaseClient';
 
 export async function POST() {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
+
     try {
         if (!adminSupabase) {
             return NextResponse.json({ success: false, error: 'Supabase Admin not configured' }, { status: 500 });

@@ -1,19 +1,25 @@
+import { requireAuth } from '@/lib/auth';
 import { adminSupabase as supabase } from '@/lib/supabaseClient';
 
 export async function POST(request) {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN', 'TEAM_MEMBER'] });
+    if (authError) return authError;
+
     if (!supabase) {
         return Response.json({ error: 'Supabase admin credentials not configured' }, { status: 500 });
     }
 
     try {
         const job = await request.json();
-        console.log('API POST /api/jobs title:', job.title);
+
+        if (!job.title || typeof job.title !== 'string' || job.title.trim().length === 0) {
+            return Response.json({ error: 'Job title is required' }, { status: 400 });
+        }
 
         const { data, error } = await supabase
             .from('jobs')
             .insert({
                 title: job.title,
-                // ... (rest of the fields)
                 description: job.description || '',
                 skills: job.skills || [],
                 status: job.status || 'open',
@@ -45,6 +51,9 @@ export async function POST(request) {
 }
 
 export async function PATCH(request) {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN', 'TEAM_MEMBER'] });
+    if (authError) return authError;
+
     if (!supabase) {
         return Response.json({ error: 'Supabase admin credentials not configured' }, { status: 500 });
     }
@@ -56,7 +65,6 @@ export async function PATCH(request) {
             return Response.json({ error: 'Missing job ID' }, { status: 400 });
         }
 
-        // Map camelCase fields to snake_case if necessary
         const mappedUpdates = { ...updates };
         if (updates.locationType !== undefined) { mappedUpdates.location_type = updates.locationType; delete mappedUpdates.locationType; }
         if (updates.experienceLevel !== undefined) { mappedUpdates.experience_level = updates.experienceLevel; delete mappedUpdates.experienceLevel; }
@@ -86,6 +94,9 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
+    const { response: authError } = await requireAuth({ roles: ['ADMIN'] });
+    if (authError) return authError;
+
     if (!supabase) {
         return Response.json({ error: 'Supabase admin credentials not configured' }, { status: 500 });
     }
@@ -97,7 +108,6 @@ export async function DELETE(request) {
             return Response.json({ error: 'Missing job ID' }, { status: 400 });
         }
 
-        // 1. Delete associated interviews/assignments first
         const { error: interviewError } = await supabase
             .from('interviews')
             .delete()
@@ -107,7 +117,6 @@ export async function DELETE(request) {
             console.error('API jobs DELETE (interviews) error:', interviewError);
         }
 
-        // 2. Delete the job itself
         const { error: jobError } = await supabase
             .from('jobs')
             .delete()

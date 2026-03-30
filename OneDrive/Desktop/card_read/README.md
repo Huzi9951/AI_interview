@@ -1,6 +1,6 @@
-# VisionHire AI - Intelligent Interview Platform
+# HyperEval - Intelligent Interview Platform
 
-VisionHire AI is a state-of-the-art, AI-powered interview platform designed to conduct adaptive technical interviews using an AI avatar. It streamlines the hiring process by providing real-time speech analysis, intelligent proctoring, and comprehensive evaluation reports.
+HyperEval is a state-of-the-art, AI-powered interview platform designed to conduct adaptive technical interviews using an AI avatar. It streamlines the hiring process by providing real-time speech analysis, intelligent proctoring, and comprehensive evaluation reports.
 
 ## 🚀 Features
 
@@ -55,7 +55,7 @@ VisionHire AI is a state-of-the-art, AI-powered interview platform designed to c
 ## 💡 How It Works
 
 1. **Setup**: The recruiter uploads a Job Description (JD) and a candidate's Resume (PDF).
-2. **Analysis**: VisionHire AI analyzes the JD and Resume to identify key skills, matches, and gaps.
+2. **Analysis**: HyperEval analyzes the JD and Resume to identify key skills, matches, and gaps.
 3. **Interview**: The candidate undergoes an automated interview where the AI avatar asks adaptive questions based on the analysis.
 4. **Proctoring**: The system monitors for potential violations (like switching tabs) during the session.
 5. **Coding Round (Optional)**: Candidates may be presented with a coding challenge tailored to their skill set.

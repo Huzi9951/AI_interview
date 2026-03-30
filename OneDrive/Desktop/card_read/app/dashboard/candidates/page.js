@@ -38,7 +38,7 @@ function parseContacts(text) {
 }
 
 export default function CandidatesPage() {
-    const { state, dispatch, addCandidates, updateCandidate, assignToJob, matchCandidatesWithJob, updateMatchScore, removeCandidate } = useDashboard();
+    const { state, dispatch, addCandidates, updateCandidate, assignToJob, matchCandidatesWithJob, updateMatchScore, removeCandidate, updateJobQuestions } = useDashboard();
     const fileInputRef = useRef(null);
     const [manualName, setManualName] = useState('');
     const [manualEmail, setManualEmail] = useState('');
@@ -227,9 +227,13 @@ export default function CandidatesPage() {
             }
 
             if (filterRec !== 'all') {
-                const hasYes = interviewData && interviewData.hire_recommendation && interviewData.hire_recommendation.toLowerCase().includes('yes');
+                const recText = (interviewData?.hire_recommendation || '').toLowerCase();
+                const hasYes = recText.includes('yes') && !recText.includes('maybe');
+                const hasMaybe = recText.includes('maybe');
+                
                 if (filterRec === 'Yes') matchesRec = !!hasYes;
-                if (filterRec === 'No') matchesRec = interviewData && interviewData.hire_recommendation && !hasYes;
+                if (filterRec === 'Maybe') matchesRec = !!hasMaybe;
+                if (filterRec === 'No') matchesRec = !!recText && !hasYes && !hasMaybe;
             }
 
             if (filterHrStatus !== 'all') {
@@ -317,24 +321,31 @@ export default function CandidatesPage() {
     };
 
     // ── Generate AI questions for preview ──
-    const generateQuestionsForPreview = async () => {
+    const generateQuestionsForPreview = async (forceRegenerate = false) => {
         const job = state.jobs.find(j => j.id === inviteJobId);
         if (!job) return;
 
-        // Check if any candidate has already been invited to this job with custom questions
-        let existingQuestions = null;
-        for (const c of state.candidates) {
-            const assignment = c.jobAssignments?.find(a => a.jobId === inviteJobId);
-            if (assignment && assignment.customQuestions && assignment.customQuestions.length > 0) {
-                existingQuestions = assignment.customQuestions;
-                break;
+        if (!forceRegenerate) {
+            // Priority: find the most recently created/updated custom questions
+            let existingQuestions = null;
+            let latestUpdated = null;
+            
+            for (const c of state.candidates) {
+                const assignment = c.jobAssignments?.find(a => a.jobId === inviteJobId);
+                if (assignment && assignment.customQuestions && assignment.customQuestions.length > 0) {
+                    const updatedAt = new Date(assignment.updatedAt || assignment.assignedAt || 0).getTime();
+                    if (!latestUpdated || updatedAt > latestUpdated) {
+                        existingQuestions = assignment.customQuestions;
+                        latestUpdated = updatedAt;
+                    }
+                }
             }
-        }
 
-        if (existingQuestions) {
-            setPreviewQuestions(existingQuestions);
-            showToast('✓ Loaded saved AI questions for this job.');
-            return;
+            if (existingQuestions) {
+                setPreviewQuestions(existingQuestions);
+                showToast('✓ Loaded saved AI questions for this job.');
+                return;
+            }
         }
 
         setIsGeneratingQuestions(true);
@@ -354,7 +365,13 @@ export default function CandidatesPage() {
                 target_skill: '',
                 source: 'manual',
             }));
-            setPreviewQuestions([...manualQs, ...aiQuestions]);
+            const newQuestions = [...manualQs, ...aiQuestions];
+            setPreviewQuestions(newQuestions);
+            
+            if (forceRegenerate) {
+                await updateJobQuestions(job.id, newQuestions);
+                showToast('✓ AI Questions regenerated and saved for this job.');
+            }
         } catch (err) {
             console.error('Failed to generate questions:', err);
             showToast('⚠ Failed to generate AI questions. You can still add manually.');
@@ -365,6 +382,10 @@ export default function CandidatesPage() {
                 source: 'manual',
             }));
             setPreviewQuestions(manualQs);
+            
+            if (forceRegenerate) {
+                await updateJobQuestions(job.id, manualQs);
+            }
         }
         setIsGeneratingQuestions(false);
     };
@@ -602,8 +623,9 @@ export default function CandidatesPage() {
                     </select>
                     <select className={styles.filterDropdown} value={filterRec} onChange={e => setFilterRec(e.target.value)}>
                         <option value="all">🤖 AI Recommendation: All</option>
-                        <option value="Yes">👍 AI Recommended (Yes)</option>
-                        <option value="No">👎 Not Recommended (No)</option>
+                        <option value="Yes">🌟 AI Recommended (Yes)</option>
+                        <option value="Maybe">🤔 Maybe</option>
+                        <option value="No">❌ Not Recommended (No)</option>
                     </select>
                 </div>
             </div>
@@ -687,8 +709,8 @@ export default function CandidatesPage() {
                                                                 </span>
                                                             </div>
                                                             {rec && (
-                                                                <div className={styles.aiRecBadge} data-rec={isYes ? 'yes' : 'no'}>
-                                                                    AI: {isYes ? 'Yes' : 'No'}
+                                                                <div className={styles.aiRecBadge} data-rec={rec.toLowerCase().replace(/\s+/g, '-')}>
+                                                                    AI: {rec.toLowerCase().includes('strong yes') ? 'Strong Yes' : rec.toLowerCase().includes('yes') ? 'Yes' : rec.toLowerCase().includes('maybe') ? 'Maybe' : 'No'}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -938,7 +960,7 @@ export default function CandidatesPage() {
                                                     + Add Question
                                                 </button>
                                                 <button className={styles.addQuestionBtn}
-                                                    onClick={generateQuestionsForPreview}
+                                                    onClick={() => generateQuestionsForPreview(true)}
                                                     style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
                                                     🔄 Regenerate AI Questions
                                                 </button>

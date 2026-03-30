@@ -160,6 +160,22 @@ function dashboardReducer(state, action) {
             return { ...state, candidates };
         }
 
+        case 'UPDATE_JOB_QUESTIONS': {
+            const { jobId, customQuestions } = action.payload;
+            const candidates = state.candidates.map(c => {
+                const updatedAssignments = (c.jobAssignments || []).map(a => {
+                    // Only update questions if status is 'assigned'
+                    if (a.jobId === jobId && a.status === 'assigned') {
+                        return { ...a, customQuestions, updatedAt: new Date().toISOString() };
+                    }
+                    return a;
+                });
+                return { ...c, jobAssignments: updatedAssignments };
+            });
+            return { ...state, candidates };
+        }
+
+
         case 'CHANGE_CANDIDATE_JOB': {
             const { candidateId, newJobId, newJobTitle } = action.payload;
             const candidates = state.candidates.map(c => {
@@ -245,7 +261,8 @@ export function DashboardProvider({ children }) {
             // 0. Fetch User Role & Assigned Jobs from Supabase
             let currentUser = state.user;
             try {
-                const { supabase: client } = await import('@/lib/supabaseClient');
+                const { getSupabase } = await import('@/lib/supabaseBrowser');
+                const client = getSupabase();
                 if (client) {
                     const { data: { user } } = await client.auth.getUser();
                     if (user) {
@@ -254,6 +271,7 @@ export function DashboardProvider({ children }) {
                             email: user.email,
                             role: user.user_metadata?.role || 'ADMIN',
                             assigned_jobs: user.user_metadata?.assigned_jobs || [],
+                            assigned_candidates: user.user_metadata?.assigned_candidates || {},
                             companyName: user.user_metadata?.company_name || currentUser.companyName,
                             name: user.user_metadata?.full_name || user.user_metadata?.name || currentUser.name
                         };
@@ -331,10 +349,23 @@ export function DashboardProvider({ children }) {
                 // ROLE-BASED FILTERING
                 if (currentUser.role === 'CLIENT') {
                     const assignedIds = new Set(currentUser.assigned_jobs || []);
+                    const assignedCandidatesMap = currentUser.assigned_candidates || {};
+
                     formattedJobs = formattedJobs.filter(j => assignedIds.has(j.id));
-                    formattedCandidates = formattedCandidates.filter(c => 
-                        c.jobAssignments && c.jobAssignments.some(a => assignedIds.has(a.jobId))
-                    );
+                    
+                    formattedCandidates = formattedCandidates.filter(c => {
+                        return c.jobAssignments && c.jobAssignments.some(a => {
+                            if (!assignedIds.has(a.jobId)) return false;
+                            
+                            const specificCandidates = assignedCandidatesMap[a.jobId];
+                            if (specificCandidates && Array.isArray(specificCandidates)) {
+                                return specificCandidates.includes(c.email);
+                            }
+                            
+                            // If no specific candidates array is defined for this job (legacy), allow all
+                            return true; 
+                        });
+                    });
                 }
 
                 dispatch({
@@ -441,12 +472,13 @@ export function DashboardProvider({ children }) {
                 };
                 dispatch({ type: 'ADD_JOB', payload: formatted });
                 return formatted;
+            } else {
+                throw new Error(data.error || 'Failed to add job');
             }
         } catch (err) {
             console.error('Persistent addJob failed:', err);
+            throw err;
         }
-        // Fallback for offline/local-only
-        dispatch({ type: 'ADD_JOB', payload: jobData });
     };
 
     const updateJob = async (jobData) => {
@@ -460,12 +492,13 @@ export function DashboardProvider({ children }) {
             if (data.success) {
                 dispatch({ type: 'UPDATE_JOB', payload: jobData });
                 return true;
+            } else {
+                throw new Error(data.error || 'Failed to update job');
             }
         } catch (err) {
             console.error('Persistent updateJob failed:', err);
+            throw err;
         }
-        dispatch({ type: 'UPDATE_JOB', payload: jobData });
-        return false;
     };
 
     const deleteJob = async (jobId) => {
@@ -479,12 +512,13 @@ export function DashboardProvider({ children }) {
             if (data.success) {
                 dispatch({ type: 'DELETE_JOB', payload: jobId });
                 return true;
+            } else {
+                throw new Error(data.error || 'Failed to delete job');
             }
         } catch (err) {
             console.error('Persistent deleteJob failed:', err);
+            throw err;
         }
-        dispatch({ type: 'DELETE_JOB', payload: jobId });
-        return false;
     };
 
     const addCandidates = async (candidatesArray) => {
@@ -510,13 +544,13 @@ export function DashboardProvider({ children }) {
                 }));
                 dispatch({ type: 'ADD_CANDIDATES', payload: apiCandidates.length > 0 ? apiCandidates : candidatesArray });
                 return apiCandidates.length > 0 ? apiCandidates : candidatesArray;
+            } else {
+                throw new Error(data.error || 'Failed to add candidates');
             }
         } catch (err) {
             console.error('Persistent addCandidates failed:', err);
+            throw err;
         }
-        // Fallback: use temporary IDs in reducer for offline/error cases
-        dispatch({ type: 'ADD_CANDIDATES', payload: candidatesArray });
-        return candidatesArray;
     };
 
     const unassignFromJob = async (candidateId, jobId) => {
@@ -524,7 +558,8 @@ export function DashboardProvider({ children }) {
             const candidate = state.candidates.find(c => c.id === candidateId);
             if (candidate) {
                 // Persistent unassign via regular supabase if possible, but skip if admin needed
-                const { supabase: persistentClient } = await import('@/lib/supabaseClient');
+                const { getSupabase } = await import('@/lib/supabaseBrowser');
+                const persistentClient = getSupabase();
                 if (persistentClient) {
                     await persistentClient
                         .from('interviews')
@@ -540,12 +575,10 @@ export function DashboardProvider({ children }) {
     };
 
     const assignToJob = async (idSet, jobId, jobTitle) => {
-        // Capture candidates and job BEFORE async operations to avoid stale closures
         const candidatesToAssign = state.candidates.filter(c => idSet.has(c.id));
         const job = state.jobs.find(j => j.id === jobId);
 
         try {
-            // Create new "assigned" status records in Supabase via API
             const inviteData = candidatesToAssign.map(c => ({
                 candidateEmail: c.email,
                 candidateName: c.name,
@@ -568,19 +601,15 @@ export function DashboardProvider({ children }) {
                     payload: { candidateIds: Array.from(idSet), jobId, jobTitle }
                 });
                 
-                // Trigger auto-matching with captured data (not stale state)
                 matchCandidatesWithJob(candidatesToAssign, job);
-                
                 return true;
+            } else {
+                throw new Error(data.error || 'Failed to assign candidates');
             }
         } catch (err) {
             console.error('Persistent assignToJob failed:', err);
+            throw err;
         }
-        // Fallback
-        dispatch({
-            type: 'ASSIGN_TO_JOB',
-            payload: { candidateIds: Array.from(idSet), jobId, jobTitle }
-        });
     };
 
     const matchCandidatesWithJob = async (candidatesOrIdSet, jobOrJobId) => {
@@ -630,12 +659,13 @@ export function DashboardProvider({ children }) {
                 const data = await res.json();
                 if (data.success) {
                     dispatch({ type: 'UPDATE_CANDIDATE_MATCH_SCORE', payload: { candidateId, jobId, matchScore: score, analysis } });
+                } else {
+                    console.error('Persistent updateMatchScore API rejected the patch:', data.error);
                 }
             }
         } catch (err) {
             console.error('Persistent updateMatchScore failed:', err);
         }
-        dispatch({ type: 'UPDATE_CANDIDATE_MATCH_SCORE', payload: { candidateId, jobId, matchScore: score, analysis } });
     };
 
     const updateCandidateJobStatus = async (candidateId, jobId, status, score = null) => {
@@ -657,15 +687,35 @@ export function DashboardProvider({ children }) {
                         type: 'UPDATE_CANDIDATE_JOB_STATUS',
                         payload: { candidateId, jobId, status, score },
                     });
+                } else {
+                    throw new Error(data.error || 'Failed to update candidate status');
                 }
             }
         } catch (err) {
             console.error('Persistent updateCandidateJobStatus failed:', err);
+            throw err;
         }
-        dispatch({
-            type: 'UPDATE_CANDIDATE_JOB_STATUS',
-            payload: { candidateId, jobId, status, score },
-        });
+    };
+
+    const updateJobQuestions = async (jobId, customQuestions) => {
+        try {
+            // Update local state first for immediate UI reflection
+            dispatch({ type: 'UPDATE_JOB_QUESTIONS', payload: { jobId, customQuestions } });
+
+            // Persist the changes solely to the 'assigned' candidates (those waiting to be invited)
+            const res = await fetch('/api/interviews/update-job-questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jobId, customQuestions })
+            });
+
+            const data = await res.json();
+            if (!data.success) {
+                console.error('Failed to persist job questions updates:', data.error);
+            }
+        } catch (err) {
+            console.error('API call updateJobQuestions failed:', err);
+        }
     };
 
     const updateUser = async (userData) => {
@@ -677,7 +727,8 @@ export function DashboardProvider({ children }) {
             
             // Sync with Supabase Auth Metadata
             try {
-                const { supabase: client } = await import('@/lib/supabaseClient');
+                const { getSupabase } = await import('@/lib/supabaseBrowser');
+                const client = getSupabase();
                 if (client) {
                     await client.auth.updateUser({
                         data: {
@@ -705,11 +756,13 @@ export function DashboardProvider({ children }) {
             if (data.success) {
                 dispatch({ type: 'REMOVE_CANDIDATE', payload: candidate.id });
                 return true;
+            } else {
+                throw new Error(data.error || 'Failed to remove candidate');
             }
         } catch (err) {
             console.error('Persistent removeCandidate failed:', err);
+            throw err;
         }
-        return false;
     };
 
     const toggleJobStatus = async (jobId) => {
@@ -726,12 +779,13 @@ export function DashboardProvider({ children }) {
             if (data.success) {
                 dispatch({ type: 'TOGGLE_JOB_STATUS', payload: { id: jobId, newStatus } });
                 return true;
+            } else {
+                throw new Error(data.error || 'Failed to toggle job status');
             }
         } catch (err) {
             console.error('Persistent toggleJobStatus failed:', err);
+            throw err;
         }
-        dispatch({ type: 'TOGGLE_JOB_STATUS', payload: { id: jobId, newStatus } });
-        return false;
     };
 
     const updateCandidate = async (id, updates) => {
@@ -745,12 +799,13 @@ export function DashboardProvider({ children }) {
             if (data.success) {
                 dispatch({ type: 'UPDATE_CANDIDATE', payload: { id, updates } });
                 return true;
+            } else {
+                throw new Error(data.error || 'Failed to update candidate');
             }
         } catch (err) {
             console.error('Persistent updateCandidate failed:', err);
+            throw err;
         }
-        dispatch({ type: 'UPDATE_CANDIDATE', payload: { id, updates } });
-        return false;
     };
  
     return (
@@ -770,6 +825,7 @@ export function DashboardProvider({ children }) {
             matchCandidatesWithJob,
             updateMatchScore,
             updateCandidateJobStatus,
+            updateJobQuestions,
             updateUser
         }}>
             {children}
